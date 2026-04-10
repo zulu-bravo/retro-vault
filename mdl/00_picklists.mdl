@@ -1,0 +1,104 @@
+/*
+ * RetroVault - Picklist Definitions
+ * Deploy this file FIRST before any object MDL files.
+ */
+
+RECREATE Picklist feedback_category__c (
+    label('Feedback Category'),
+    active(true),
+    Picklistentry went_well__c(
+        value('Went Well'),
+        order(0),
+        active(true)
+    ),
+    Picklistentry didnt_go_well__c(
+        value('Didn\'t Go Well'),
+        order(1),
+        active(true)
+    ),
+    Picklistentry ideas__c(
+        value('Ideas'),
+        order(2),
+        active(true)
+    )
+);
+
+RECREATE Picklist board_status__c (
+    label('Board Status'),
+    active(true),
+    Picklistentry active__c(
+        value('Active'),
+        order(0),
+        active(true)
+    ),
+    Picklistentry closed__c(
+        value('Closed'),
+        order(1),
+        active(true)
+    )
+);
+
+RECREATE Picklist action_status__c (
+    label('Action Status'),
+    active(true),
+    Picklistentry open__c(
+        value('Open'),
+        order(0),
+        active(true)
+    ),
+    Picklistentry in_progress__c(
+        value('In Progress'),
+        order(1),
+        active(true)
+    ),
+    Picklistentry done__c(
+        value('Done'),
+        order(2),
+        active(true)
+    )
+);
+
+RECREATE Picklist ai_theme__c (
+    label('AI Theme'),
+    active(true),
+    Picklistentry tooling__c(
+        value('Tooling'),
+        order(0),
+        active(true)
+    ),
+    Picklistentry process__c(
+        value('Process'),
+        order(1),
+        active(true)
+    ),
+    Picklistentry communication__c(
+        value('Communication'),
+        order(2),
+        active(true)
+    ),
+    Picklistentry scope__c(
+        value('Scope'),
+        order(3),
+        active(true)
+    ),
+    Picklistentry staffing__c(
+        value('Staffing'),
+        order(4),
+        active(true)
+    ),
+    Picklistentry quality__c(
+        value('Quality'),
+        order(5),
+        active(true)
+    ),
+    Picklistentry morale__c(
+        value('Morale'),
+        order(6),
+        active(true)
+    ),
+    Picklistentry other__c(
+        value('Other'),
+        order(7),
+        active(true)
+    )
+);
