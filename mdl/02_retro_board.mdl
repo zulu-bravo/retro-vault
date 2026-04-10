@@ -1,0 +1,58 @@
+/*
+ * RetroVault - Retro Board Object
+ * Depends on: 00_picklists.mdl, 01_team.mdl
+ * User references use built-in user__sys object.
+ */
+
+RECREATE Object retro_board__c (
+    label('Retro Board'),
+    label_plural('Retro Boards'),
+    active(true),
+    description('A retrospective session board'),
+
+    Objectfield name__v (
+        label('Board Name'),
+        type('String'),
+        active(true),
+        required(true)
+    ),
+
+    Objectfield facilitator__c (
+        label('Facilitator'),
+        type('ObjectReference'),
+        active(true),
+        required(true),
+        object('user__sys'),
+        relationship_type('reference')
+    ),
+
+    Objectfield team__c (
+        label('Team'),
+        type('ObjectReference'),
+        active(true),
+        required(true),
+        object('team__c'),
+        relationship_type('reference')
+    ),
+
+    Objectfield release_tag__c (
+        label('Release Tag'),
+        type('String'),
+        active(true)
+    ),
+
+    Objectfield board_date__c (
+        label('Board Date'),
+        type('Date'),
+        active(true),
+        required(true)
+    ),
+
+    Objectfield status__c (
+        label('Status'),
+        type('Picklist'),
+        active(true),
+        required(true),
+        picklist('board_status__c')
+    )
+);

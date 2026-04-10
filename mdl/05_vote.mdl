@@ -1,0 +1,49 @@
+/*
+ * RetroVault - Vote Object
+ * Depends on: 03_feedback_item.mdl
+ * User references use built-in user__sys object.
+ *
+ * Uniqueness constraint (one vote per user per feedback item)
+ * is enforced in application JavaScript since MDL does not support
+ * multi-field unique constraints.
+ *
+ * Uses soft-delete via active__c field since the DataService
+ * does not provide a deleteRecord method.
+ */
+
+RECREATE Object vote__c (
+    label('Vote'),
+    label_plural('Votes'),
+    active(true),
+    description('Upvote on a feedback item, one per user per item'),
+
+    Objectfield name__v (
+        label('Vote ID'),
+        type('String'),
+        active(true)
+    ),
+
+    Objectfield feedback_item__c (
+        label('Feedback Item'),
+        type('ObjectReference'),
+        active(true),
+        required(true),
+        object('feedback_item__c'),
+        relationship_type('reference')
+    ),
+
+    Objectfield voter__c (
+        label('Voter'),
+        type('ObjectReference'),
+        active(true),
+        required(true),
+        object('user__sys'),
+        relationship_type('reference')
+    ),
+
+    Objectfield active__c (
+        label('Active'),
+        type('YesNo'),
+        active(true)
+    )
+);

@@ -1,0 +1,64 @@
+/*
+ * RetroVault - Feedback Item Object
+ * Depends on: 00_picklists.mdl, 02_retro_board.mdl
+ * User references use built-in user__sys object.
+ */
+
+RECREATE Object feedback_item__c (
+    label('Feedback Item'),
+    label_plural('Feedback Items'),
+    active(true),
+    description('Individual feedback entry on a retro board'),
+
+    Objectfield name__v (
+        label('Feedback Summary'),
+        type('String'),
+        active(true)
+    ),
+
+    Objectfield retro_board__c (
+        label('Retro Board'),
+        type('ObjectReference'),
+        active(true),
+        required(true),
+        object('retro_board__c'),
+        relationship_type('reference')
+    ),
+
+    Objectfield author__c (
+        label('Author'),
+        type('ObjectReference'),
+        active(true),
+        required(true),
+        object('user__sys'),
+        relationship_type('reference')
+    ),
+
+    Objectfield category__c (
+        label('Category'),
+        type('Picklist'),
+        active(true),
+        required(true),
+        picklist('feedback_category__c')
+    ),
+
+    Objectfield content__c (
+        label('Content'),
+        type('String'),
+        active(true),
+        required(true)
+    ),
+
+    Objectfield ai_theme__c (
+        label('Theme'),
+        type('Picklist'),
+        active(true),
+        picklist('ai_theme__c')
+    ),
+
+    Objectfield vote_count__c (
+        label('Vote Count'),
+        type('Number'),
+        active(true)
+    )
+);
