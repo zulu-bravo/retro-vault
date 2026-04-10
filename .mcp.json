@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "veeva-vault": {
+      "command": "./vaultMCP/.venv/bin/python",
+      "args": ["./vaultMCP/server.py"]
+    }
+  }
+}
