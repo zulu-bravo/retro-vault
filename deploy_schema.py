@@ -238,7 +238,7 @@ PICKLIST_MDL = [
 
 def _execute_mdl(mdl_script):
     """Execute an MDL script via the Vault configuration API."""
-    return _post_form("/mdl/execute", {"script": mdl_script})
+    return _post_form("/configuration/mdl", {"script": mdl_script})
 
 
 def create_picklists():
