@@ -87,6 +87,26 @@ def _get(path, params=None):
         return data
 
 
+def _post_form(path, data):
+    global _session_id
+    for attempt in range(2):
+        resp = requests.post(
+            f"{_base_url()}{path}",
+            headers={"Authorization": _session(), "Accept": "application/json"},
+            data=data,
+            timeout=30,
+        )
+        if resp.status_code == 401 and attempt == 0:
+            _session_id = None
+            continue
+        resp.raise_for_status()
+        result = resp.json()
+        if _is_session_expired(result) and attempt == 0:
+            _session_id = None
+            continue
+        return result
+
+
 def _post_json(path, payload):
     global _session_id
     for attempt in range(2):
@@ -168,72 +188,79 @@ def _extract_error(data):
 # Step 1: Picklists
 # ---------------------------------------------------------------------------
 
-PICKLISTS = [
+PICKLIST_MDL = [
     {
         "name": "feedback_category__c",
-        "label": "Feedback Category",
-        "picklistValues": [
-            {"label": "Went Well", "value": "went_well__c"},
-            {"label": "Didn't Go Well", "value": "didnt_go_well__c"},
-            {"label": "Ideas", "value": "ideas__c"},
-        ],
+        "mdl": """RECREATE Picklist feedback_category__c (
+    label('Feedback Category'),
+    active(true),
+    Picklistentry went_well__c(value('Went Well'), order(0), active(true)),
+    Picklistentry didnt_go_well__c(value('Didn\\'t Go Well'), order(1), active(true)),
+    Picklistentry ideas__c(value('Ideas'), order(2), active(true))
+);""",
     },
     {
         "name": "board_status__c",
-        "label": "Board Status",
-        "picklistValues": [
-            {"label": "Active", "value": "active__c"},
-            {"label": "Closed", "value": "closed__c"},
-        ],
+        "mdl": """RECREATE Picklist board_status__c (
+    label('Board Status'),
+    active(true),
+    Picklistentry active__c(value('Active'), order(0), active(true)),
+    Picklistentry closed__c(value('Closed'), order(1), active(true))
+);""",
     },
     {
         "name": "action_status__c",
-        "label": "Action Status",
-        "picklistValues": [
-            {"label": "Open", "value": "open__c"},
-            {"label": "In Progress", "value": "in_progress__c"},
-            {"label": "Done", "value": "done__c"},
-        ],
+        "mdl": """RECREATE Picklist action_status__c (
+    label('Action Status'),
+    active(true),
+    Picklistentry open__c(value('Open'), order(0), active(true)),
+    Picklistentry in_progress__c(value('In Progress'), order(1), active(true)),
+    Picklistentry done__c(value('Done'), order(2), active(true))
+);""",
     },
     {
         "name": "ai_theme__c",
-        "label": "AI Theme",
-        "picklistValues": [
-            {"label": "Tooling", "value": "tooling__c"},
-            {"label": "Process", "value": "process__c"},
-            {"label": "Communication", "value": "communication__c"},
-            {"label": "Scope", "value": "scope__c"},
-            {"label": "Staffing", "value": "staffing__c"},
-            {"label": "Quality", "value": "quality__c"},
-            {"label": "Morale", "value": "morale__c"},
-            {"label": "Other", "value": "other__c"},
-        ],
+        "mdl": """RECREATE Picklist ai_theme__c (
+    label('AI Theme'),
+    active(true),
+    Picklistentry tooling__c(value('Tooling'), order(0), active(true)),
+    Picklistentry process__c(value('Process'), order(1), active(true)),
+    Picklistentry communication__c(value('Communication'), order(2), active(true)),
+    Picklistentry scope__c(value('Scope'), order(3), active(true)),
+    Picklistentry staffing__c(value('Staffing'), order(4), active(true)),
+    Picklistentry quality__c(value('Quality'), order(5), active(true)),
+    Picklistentry morale__c(value('Morale'), order(6), active(true)),
+    Picklistentry other__c(value('Other'), order(7), active(true))
+);""",
     },
 ]
 
 
+def _execute_mdl(mdl_script):
+    """Execute an MDL script via the Vault configuration API."""
+    return _post_form("/mdl/execute", {"script": mdl_script})
+
+
 def create_picklists():
-    print("\n=== Creating Picklists ===")
-    for pl in PICKLISTS:
+    print("\n=== Creating Picklists (via MDL) ===")
+    for pl in PICKLIST_MDL:
         try:
-            result = _post_json("/objects/picklists", pl)
+            result = _execute_mdl(pl["mdl"])
             if result.get("responseStatus") == "SUCCESS":
                 log_ok("Picklist", pl["name"])
             else:
                 err = _extract_error(result)
-                if "DUPLICATE" in err.upper() or "already exists" in err.lower():
+                if "already exists" in err.lower():
                     log_exists("Picklist", pl["name"])
                 else:
                     log_error("Picklist", pl["name"], err)
         except requests.exceptions.HTTPError as e:
-            status = e.response.status_code if e.response is not None else "?"
-            body = ""
             try:
                 body = e.response.json()
                 err_msg = _extract_error(body)
             except Exception:
                 err_msg = str(e)
-            if status == 400 and ("DUPLICATE" in err_msg.upper() or "already exists" in err_msg.lower()):
+            if "already exists" in err_msg.lower():
                 log_exists("Picklist", pl["name"])
             else:
                 log_error("Picklist", pl["name"], err_msg)
@@ -246,7 +273,7 @@ def verify_picklists():
     try:
         result = _get("/objects/picklists")
         picklist_names = [p.get("name") for p in result.get("picklists", [])]
-        for pl in PICKLISTS:
+        for pl in PICKLIST_MDL:
             if pl["name"] in picklist_names:
                 print(f"  [VERIFIED] Picklist {pl['name']} exists")
                 # Also verify values
