@@ -4,11 +4,8 @@
  * User references use built-in user__sys object.
  *
  * Uniqueness constraint (one vote per user per feedback item)
- * is enforced in application JavaScript since MDL does not support
- * multi-field unique constraints.
- *
- * Uses soft-delete via active__c field since the DataService
- * does not provide a deleteRecord method.
+ * is enforced in application logic (PageController) by querying
+ * before creating.
  */
 
 RECREATE Object vote__c (
@@ -39,11 +36,5 @@ RECREATE Object vote__c (
         required(true),
         object('user__sys'),
         relationship_type('reference')
-    ),
-
-    Objectfield active__c (
-        label('Active'),
-        type('YesNo'),
-        active(true)
     )
 );

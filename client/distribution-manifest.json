@@ -1,0 +1,12 @@
+{
+    "name": "retrovault__c",
+    "pages": [
+        {
+            "name": "retrovault__c",
+            "file": "dist/index.js"
+        }
+    ],
+    "stylesheets": [
+        "styles/retrovault.css"
+    ]
+}
