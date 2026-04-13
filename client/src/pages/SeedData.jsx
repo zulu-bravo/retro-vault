@@ -98,7 +98,7 @@ export default function SeedData({ navigate, showToast }) {
                     author__c: u[fd.author].id,
                     category__c: fd.cat,
                     content__c: fd.content,
-                    ai_theme__c: fd.theme,
+                    theme__c: fd.theme,
                     vote_count__c: fd.votes
                 });
                 feedbackIds.push(id);

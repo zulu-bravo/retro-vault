@@ -58,10 +58,10 @@ export default function Insights({ showToast }) {
 /* ---------- Compute helpers ---------- */
 
 function computeBlockers(feedback) {
-    const negatives = feedback.filter(fi => fi.category__c === 'didnt_go_well__c' && fi.ai_theme__c);
+    const negatives = feedback.filter(fi => fi.category__c === 'didnt_go_well__c' && fi.theme__c);
     const themeMap = {};
     negatives.forEach(fi => {
-        const theme = fi.ai_theme__c;
+        const theme = fi.theme__c;
         if (!themeMap[theme]) themeMap[theme] = { theme, boards: new Set(), votes: 0, count: 0 };
         themeMap[theme].boards.add(fi.retro_board__c);
         themeMap[theme].votes += parseInt(fi.vote_count__c || 0, 10);

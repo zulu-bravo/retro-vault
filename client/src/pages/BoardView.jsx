@@ -153,7 +153,7 @@ export default function BoardView({ boardId, navigate, showToast }) {
                 content__c: fbContent,
                 vote_count__c: 0
             };
-            if (fbTheme) fields.ai_theme__c = fbTheme;
+            if (fbTheme) fields.theme__c = fbTheme;
 
             const newId = await create('feedback_item__c', fields);
             setFeedback(prev => [...prev, { id: newId, ...fields }]);
@@ -390,7 +390,7 @@ function FeedbackCard({ item, authorName, isVoted, onVote, canVote }) {
             <div className="vault-feedback-card__footer">
                 <span className="vault-feedback-card__author">{authorName}</span>
                 <div className="vault-feedback-card__actions">
-                    {item.ai_theme__c && <ThemeBadge theme={item.ai_theme__c} />}
+                    {item.theme__c && <ThemeBadge theme={item.theme__c} />}
                     {canVote ? (
                         <button
                             className={'vault-vote-btn' + (isVoted ? ' vault-vote-btn--voted' : '')}

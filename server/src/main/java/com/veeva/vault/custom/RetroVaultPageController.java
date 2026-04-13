@@ -1,11 +1,12 @@
 package com.veeva.vault.custom;
 
 import com.veeva.vault.sdk.api.core.RequestContext;
+import com.veeva.vault.sdk.api.core.RollbackException;
 import com.veeva.vault.sdk.api.core.ServiceLocator;
 import com.veeva.vault.sdk.api.core.ValueType;
 import com.veeva.vault.sdk.api.core.VaultCollections;
+import com.veeva.vault.sdk.api.data.PositionalRecordId;
 import com.veeva.vault.sdk.api.data.Record;
-import com.veeva.vault.sdk.api.data.RecordBatchSaveRequest;
 import com.veeva.vault.sdk.api.data.RecordService;
 import com.veeva.vault.sdk.api.executeas.ExecuteAs;
 import com.veeva.vault.sdk.api.executeas.ExecuteAsUser;
@@ -13,6 +14,7 @@ import com.veeva.vault.sdk.api.json.JsonArray;
 import com.veeva.vault.sdk.api.json.JsonArrayBuilder;
 import com.veeva.vault.sdk.api.json.JsonObject;
 import com.veeva.vault.sdk.api.json.JsonObjectBuilder;
+import com.veeva.vault.sdk.api.json.JsonProperty;
 import com.veeva.vault.sdk.api.json.JsonService;
 import com.veeva.vault.sdk.api.json.JsonValueType;
 import com.veeva.vault.sdk.api.page.PageController;
@@ -22,14 +24,13 @@ import com.veeva.vault.sdk.api.page.PageEventResponse;
 import com.veeva.vault.sdk.api.page.PageLoadContext;
 import com.veeva.vault.sdk.api.page.PageLoadResponse;
 import com.veeva.vault.sdk.api.query.QueryExecutionRequest;
-import com.veeva.vault.sdk.api.query.QueryExecutionResponse;
-import com.veeva.vault.sdk.api.query.QueryExecutionResult;
-import com.veeva.vault.sdk.api.query.QueryResponse;
-import com.veeva.vault.sdk.api.query.QueryResult;
 import com.veeva.vault.sdk.api.query.QueryService;
 
+import java.math.BigDecimal;
+import java.time.LocalDate;
+import java.time.ZonedDateTime;
 import java.util.List;
-import java.util.Set;
+import java.util.Map;
 
 /**
  * RetroVault PageController
@@ -39,23 +40,19 @@ import java.util.Set;
  *  - onEvent() handles four event types: query, create, update, delete
  *
  * A whitelist restricts the objects the client can interact with.
+ *
+ * Vault Java SDK constraints:
+ *  - No static field initializers (collections must be built per-call)
+ *  - Cannot construct java.lang.* exceptions; throw RollbackException instead
+ *  - Cannot catch java.lang.Exception; catch RollbackException specifically
  */
 @ExecuteAs(ExecuteAsUser.REQUEST_OWNER)
 @PageControllerInfo
 public class RetroVaultPageController implements PageController {
 
-    private static final Set<String> ALLOWED_OBJECTS = VaultCollections.asSet(
-            "team__c",
-            "retro_board__c",
-            "feedback_item__c",
-            "action_item__c",
-            "vote__c",
-            "user__sys"
-    );
-
-    /* =========================================================
-     * onLoad - return current user ID
-     * ========================================================= */
+    private static final String ERR_BAD_INPUT = "INVALID_INPUT";
+    private static final String ERR_NOT_ALLOWED = "OBJECT_NOT_ALLOWED";
+    private static final String ERR_OPERATION_FAILED = "OPERATION_FAILED";
 
     @Override
     public PageLoadResponse onLoad(PageLoadContext context) {
@@ -70,43 +67,30 @@ public class RetroVaultPageController implements PageController {
                 .build();
     }
 
-    /* =========================================================
-     * onEvent - dispatch query/create/update/delete events
-     * ========================================================= */
-
     @Override
     public PageEventResponse onEvent(PageEventContext context) {
         JsonService jsonService = ServiceLocator.locate(JsonService.class);
         String eventName = context.getEventName();
-        JsonObject eventData = context.getData(JsonObject.class);
+        JsonObject eventData = context.getData();
 
         try {
             JsonObject result;
-            switch (eventName) {
-                case "query":
-                    result = handleQuery(eventData, jsonService);
-                    break;
-                case "create":
-                    result = handleCreate(eventData, jsonService);
-                    break;
-                case "update":
-                    result = handleUpdate(eventData, jsonService);
-                    break;
-                case "delete":
-                    result = handleDelete(eventData, jsonService);
-                    break;
-                default:
-                    return errorResponse(context, jsonService, "Unknown event: " + eventName);
+            if ("query".equals(eventName)) {
+                result = handleQuery(eventData, jsonService);
+            } else if ("create".equals(eventName)) {
+                result = handleCreate(eventData, jsonService);
+            } else if ("update".equals(eventName)) {
+                result = handleUpdate(eventData, jsonService);
+            } else if ("delete".equals(eventName)) {
+                result = handleDelete(eventData, jsonService);
+            } else {
+                return errorResponse(context, "Unknown event: " + eventName);
             }
             return context.newEventResponseBuilder().withData(result).build();
-        } catch (Exception e) {
-            return errorResponse(context, jsonService, e.getMessage());
+        } catch (RollbackException e) {
+            return errorResponse(context, e.getMessage());
         }
     }
-
-    /* =========================================================
-     * Event Handlers
-     * ========================================================= */
 
     /**
      * Handle "query" event
@@ -116,11 +100,12 @@ public class RetroVaultPageController implements PageController {
     private JsonObject handleQuery(JsonObject data, JsonService jsonService) {
         String vql = data.getValue("vql", JsonValueType.STRING);
         if (vql == null || vql.isEmpty()) {
-            throw new IllegalArgumentException("Missing required parameter: vql");
+            throw new RollbackException(ERR_BAD_INPUT, "Missing required parameter: vql");
         }
 
-        // Basic whitelist check - the FROM clause must reference an allowed object
         assertVqlWhitelisted(vql);
+
+        List<String> selectedFields = parseSelectFields(vql);
 
         QueryService queryService = ServiceLocator.locate(QueryService.class);
         QueryExecutionRequest request = queryService.newQueryExecutionRequestBuilder()
@@ -128,46 +113,125 @@ public class RetroVaultPageController implements PageController {
                 .build();
 
         JsonArrayBuilder records = jsonService.newJsonArrayBuilder();
+        final String[] queryError = { null };
 
         queryService.query(request)
-                .onSuccess(queryExecutionResponse -> {
-                    queryExecutionResponse.streamResults().forEach(row -> {
+                .onSuccess(response -> {
+                    response.streamResults().forEach(row -> {
                         JsonObjectBuilder obj = jsonService.newJsonObjectBuilder();
-                        row.getFieldNames().forEach(field -> {
-                            Object value = row.getValue(field, ValueType.STRING);
-                            if (value == null) {
-                                // Try other types
-                                try {
-                                    Object num = row.getValue(field, ValueType.NUMBER);
-                                    if (num != null) {
-                                        obj.setValue(field, ((Number) num).doubleValue());
-                                        return;
-                                    }
-                                } catch (Exception ignored) { }
-                                try {
-                                    Object bool = row.getValue(field, ValueType.BOOLEAN);
-                                    if (bool != null) {
-                                        obj.setValue(field, (Boolean) bool);
-                                        return;
-                                    }
-                                } catch (Exception ignored) { }
-                                obj.setValue(field, (String) null);
-                            } else {
-                                obj.setValue(field, value.toString());
-                            }
-                        });
+                        for (String fieldName : selectedFields) {
+                            obj.setValue(fieldName, readField(row, fieldName, jsonService));
+                        }
                         records.add(obj.build());
                     });
                 })
-                .onError(queryOperationError -> {
-                    throw new RuntimeException("Query failed: " + queryOperationError.getMessage());
-                })
+                .onError(err -> queryError[0] = err.getMessage())
                 .execute();
+
+        if (queryError[0] != null) {
+            throw new RollbackException(ERR_OPERATION_FAILED, "Query failed: " + queryError[0]);
+        }
 
         return jsonService.newJsonObjectBuilder()
                 .setValue("success", true)
                 .setValue("records", records.build())
                 .build();
+    }
+
+    /**
+     * Read a single field from a query result row. The ValueType is determined
+     * by the hardcoded RetroVault schema (see fieldType()), avoiding the need
+     * for QueryDescribe and type probing.
+     */
+    private Object readField(com.veeva.vault.sdk.api.query.QueryExecutionResult row,
+                              String fieldName,
+                              JsonService jsonService) {
+        ValueType<?> type = fieldType(fieldName);
+
+        if (type == ValueType.PICKLIST_VALUES) {
+            List<String> list = row.getValue(fieldName, ValueType.PICKLIST_VALUES);
+            return list == null ? null : toJsonArray(list, jsonService);
+        }
+        if (type == ValueType.DATE) {
+            LocalDate d = row.getValue(fieldName, ValueType.DATE);
+            return d == null ? null : d.toString();
+        }
+        if (type == ValueType.DATETIME) {
+            ZonedDateTime dt = row.getValue(fieldName, ValueType.DATETIME);
+            return dt == null ? null : dt.toString();
+        }
+        if (type == ValueType.NUMBER) {
+            return row.getValue(fieldName, ValueType.NUMBER);
+        }
+        if (type == ValueType.BOOLEAN) {
+            return row.getValue(fieldName, ValueType.BOOLEAN);
+        }
+        return row.getValue(fieldName, ValueType.STRING);
+    }
+
+    /**
+     * Map a field name to its expected ValueType for the RetroVault schema.
+     * Unknown fields default to STRING.
+     */
+    private ValueType<?> fieldType(String fieldName) {
+        if ("status__c".equals(fieldName)
+                || "category__c".equals(fieldName)
+                || "theme__c".equals(fieldName)) {
+            return ValueType.PICKLIST_VALUES;
+        }
+        if ("board_date__c".equals(fieldName) || "due_date__c".equals(fieldName)) {
+            return ValueType.DATE;
+        }
+        if ("completed_at__c".equals(fieldName)) {
+            return ValueType.DATETIME;
+        }
+        if ("vote_count__c".equals(fieldName)) {
+            return ValueType.NUMBER;
+        }
+        return ValueType.STRING;
+    }
+
+    private com.veeva.vault.sdk.api.json.JsonArray toJsonArray(List<String> items, JsonService jsonService) {
+        JsonArrayBuilder arr = jsonService.newJsonArrayBuilder();
+        for (String item : items) {
+            arr.add(item);
+        }
+        return arr.build();
+    }
+
+    /**
+     * Parse the field list from the SELECT clause of a VQL query.
+     * Example: "SELECT id, name__v, status__c FROM team__c" → [id, name__v, status__c].
+     * Subqueries and function calls aren't supported here.
+     */
+    private List<String> parseSelectFields(String vql) {
+        String upper = vql.toUpperCase();
+        int selectIdx = upper.indexOf("SELECT");
+        int fromIdx = upper.indexOf(" FROM ");
+        if (selectIdx < 0 || fromIdx < 0 || fromIdx <= selectIdx) {
+            throw new RollbackException(ERR_BAD_INPUT, "Cannot parse VQL SELECT clause");
+        }
+        String selectClause = vql.substring(selectIdx + "SELECT".length(), fromIdx).trim();
+        List<String> fields = VaultCollections.newList();
+        StringBuilder current = new StringBuilder();
+        for (int i = 0; i < selectClause.length(); i++) {
+            char c = selectClause.charAt(i);
+            if (c == ',') {
+                addField(fields, current.toString());
+                current.setLength(0);
+            } else {
+                current.append(c);
+            }
+        }
+        addField(fields, current.toString());
+        return fields;
+    }
+
+    private void addField(List<String> fields, String token) {
+        String name = token.trim();
+        if (!name.isEmpty()) {
+            fields.add(name);
+        }
     }
 
     /**
@@ -190,15 +254,19 @@ public class RetroVaultPageController implements PageController {
 
         recordService.batchSaveRecords(records)
                 .onSuccesses(successes -> {
-                    successes.forEach(s -> createdId[0] = s.getRecord().getValue("id", ValueType.STRING));
+                    for (PositionalRecordId pri : successes) {
+                        createdId[0] = pri.getRecordId();
+                    }
                 })
                 .onErrors(errors -> {
-                    errors.forEach(e -> errorMsg[0] = e.getError().getMessage());
+                    if (!errors.isEmpty()) {
+                        errorMsg[0] = errors.get(0).getError().getMessage();
+                    }
                 })
                 .execute();
 
         if (errorMsg[0] != null) {
-            throw new RuntimeException("Create failed: " + errorMsg[0]);
+            throw new RollbackException(ERR_OPERATION_FAILED, "Create failed: " + errorMsg[0]);
         }
 
         return jsonService.newJsonObjectBuilder()
@@ -219,7 +287,7 @@ public class RetroVaultPageController implements PageController {
         assertAllowed(objectName);
 
         if (recordId == null || recordId.isEmpty()) {
-            throw new IllegalArgumentException("Missing required parameter: id");
+            throw new RollbackException(ERR_BAD_INPUT, "Missing required parameter: id");
         }
 
         RecordService recordService = ServiceLocator.locate(RecordService.class);
@@ -230,11 +298,15 @@ public class RetroVaultPageController implements PageController {
         final String[] errorMsg = { null };
 
         recordService.batchSaveRecords(records)
-                .onErrors(errors -> errors.forEach(e -> errorMsg[0] = e.getError().getMessage()))
+                .onErrors(errors -> {
+                    if (!errors.isEmpty()) {
+                        errorMsg[0] = errors.get(0).getError().getMessage();
+                    }
+                })
                 .execute();
 
         if (errorMsg[0] != null) {
-            throw new RuntimeException("Update failed: " + errorMsg[0]);
+            throw new RollbackException(ERR_OPERATION_FAILED, "Update failed: " + errorMsg[0]);
         }
 
         return jsonService.newJsonObjectBuilder()
@@ -254,7 +326,7 @@ public class RetroVaultPageController implements PageController {
         assertAllowed(objectName);
 
         if (recordId == null || recordId.isEmpty()) {
-            throw new IllegalArgumentException("Missing required parameter: id");
+            throw new RollbackException(ERR_BAD_INPUT, "Missing required parameter: id");
         }
 
         RecordService recordService = ServiceLocator.locate(RecordService.class);
@@ -263,11 +335,15 @@ public class RetroVaultPageController implements PageController {
         final String[] errorMsg = { null };
 
         recordService.batchDeleteRecords(records)
-                .onErrors(errors -> errors.forEach(e -> errorMsg[0] = e.getError().getMessage()))
+                .onErrors(errors -> {
+                    if (!errors.isEmpty()) {
+                        errorMsg[0] = errors.get(0).getError().getMessage();
+                    }
+                })
                 .execute();
 
         if (errorMsg[0] != null) {
-            throw new RuntimeException("Delete failed: " + errorMsg[0]);
+            throw new RollbackException(ERR_OPERATION_FAILED, "Delete failed: " + errorMsg[0]);
         }
 
         return jsonService.newJsonObjectBuilder()
@@ -275,66 +351,104 @@ public class RetroVaultPageController implements PageController {
                 .build();
     }
 
-    /* =========================================================
-     * Helpers
-     * ========================================================= */
-
     private void assertAllowed(String objectName) {
-        if (objectName == null || !ALLOWED_OBJECTS.contains(objectName)) {
-            throw new IllegalArgumentException("Object not allowed: " + objectName);
+        if (!isAllowedObject(objectName)) {
+            throw new RollbackException(ERR_NOT_ALLOWED, "Object not allowed: " + objectName);
         }
+    }
+
+    private boolean isAllowedObject(String objectName) {
+        if (objectName == null) return false;
+        return "team__c".equals(objectName)
+                || "retro_board__c".equals(objectName)
+                || "feedback_item__c".equals(objectName)
+                || "action_item__c".equals(objectName)
+                || "vote__c".equals(objectName)
+                || "user__sys".equals(objectName);
     }
 
     private void assertVqlWhitelisted(String vql) {
         String upper = vql.toUpperCase();
-        boolean ok = false;
-        for (String obj : ALLOWED_OBJECTS) {
-            if (upper.contains(" FROM " + obj.toUpperCase())) {
-                ok = true;
-                break;
-            }
+        if (upper.contains(" FROM TEAM__C")
+                || upper.contains(" FROM RETRO_BOARD__C")
+                || upper.contains(" FROM FEEDBACK_ITEM__C")
+                || upper.contains(" FROM ACTION_ITEM__C")
+                || upper.contains(" FROM VOTE__C")
+                || upper.contains(" FROM USER__SYS")) {
+            return;
         }
-        if (!ok) {
-            throw new IllegalArgumentException("Query must target an allowed object");
+        throw new RollbackException(ERR_NOT_ALLOWED, "Query must target an allowed object");
+    }
+
+    /**
+     * Apply field values from a JsonObject to a Record. Strings are coerced to
+     * the field's declared Java type (LocalDate for dates, ZonedDateTime for
+     * datetimes, single-element list for picklists). JSON arrays are treated as
+     * picklist value lists. JsonValueType is a parameterized interface (not an
+     * enum), so we compare instances with ==.
+     */
+    private void applyFields(Record record, JsonObject fields) {
+        if (fields == null) {
+            return;
+        }
+        Map<String, JsonProperty> props = fields.getProperties();
+        for (Map.Entry<String, JsonProperty> entry : props.entrySet()) {
+            String fieldName = entry.getKey();
+            JsonValueType<?> jsonType = entry.getValue().getJsonValueType();
+            ValueType<?> fieldType = fieldType(fieldName);
+
+            if (jsonType == JsonValueType.STRING) {
+                String s = fields.getValue(fieldName, JsonValueType.STRING);
+                record.setValue(fieldName, coerceString(s, fieldType));
+            } else if (jsonType == JsonValueType.NUMBER) {
+                BigDecimal num = fields.getValue(fieldName, JsonValueType.NUMBER);
+                if (num != null) {
+                    record.setValue(fieldName, num);
+                }
+            } else if (jsonType == JsonValueType.BOOLEAN) {
+                record.setValue(fieldName, fields.getValue(fieldName, JsonValueType.BOOLEAN));
+            } else if (jsonType == JsonValueType.ARRAY) {
+                JsonArray arr = fields.getValue(fieldName, JsonValueType.ARRAY);
+                if (arr != null) {
+                    List<String> values = VaultCollections.newList();
+                    for (int i = 0; i < arr.getSize(); i++) {
+                        values.add(arr.getValue(i, JsonValueType.STRING));
+                    }
+                    record.setValue(fieldName, values);
+                }
+            }
         }
     }
 
     /**
-     * Apply field values from a JsonObject to a Record.
-     * Handles string, number, and boolean types.
+     * Convert a JSON string into the Java type Vault expects for the field.
+     * - DATE → LocalDate (parses ISO-8601 yyyy-MM-dd)
+     * - DATETIME → ZonedDateTime (parses ISO-8601)
+     * - PICKLIST_VALUES → single-element List<String>
+     * - everything else → String unchanged
      */
-    private void applyFields(Record record, JsonObject fields) {
-        if (fields == null) return;
-        fields.getFieldNames().forEach(fieldName -> {
-            JsonValueType type = fields.getValueType(fieldName);
-            switch (type) {
-                case STRING:
-                    record.setValue(fieldName, fields.getValue(fieldName, JsonValueType.STRING));
-                    break;
-                case NUMBER:
-                    Number num = (Number) fields.getValue(fieldName, JsonValueType.NUMBER);
-                    if (num != null) {
-                        record.setValue(fieldName, num);
-                    }
-                    break;
-                case BOOLEAN:
-                    record.setValue(fieldName, fields.getValue(fieldName, JsonValueType.BOOLEAN));
-                    break;
-                case NULL:
-                    record.setValue(fieldName, (String) null);
-                    break;
-                default:
-                    // Ignore complex types (arrays, nested objects)
-                    break;
-            }
-        });
+    private Object coerceString(String value, ValueType<?> fieldType) {
+        if (value == null) {
+            return null;
+        }
+        if (fieldType == ValueType.DATE) {
+            return LocalDate.parse(value);
+        }
+        if (fieldType == ValueType.DATETIME) {
+            return ZonedDateTime.parse(value);
+        }
+        if (fieldType == ValueType.PICKLIST_VALUES) {
+            List<String> list = VaultCollections.newList();
+            list.add(value);
+            return list;
+        }
+        return value;
     }
 
-    private PageEventResponse errorResponse(PageEventContext context, JsonService jsonService, String message) {
-        JsonObject errorData = jsonService.newJsonObjectBuilder()
-                .setValue("success", false)
-                .setValue("error", message != null ? message : "Unknown error")
+    private PageEventResponse errorResponse(PageEventContext context, String message) {
+        return context.newEventErrorResponseBuilder()
+                .withTitle("RetroVault error")
+                .withUserMessage(message != null ? message : "Unknown error")
                 .build();
-        return context.newEventResponseBuilder().withData(errorData).build();
     }
 }

@@ -24,6 +24,11 @@ function ensureInit() {
     }
 }
 
+// Vault Custom Pages wraps PageController responses as { data: <controller payload> }.
+function unwrap(resp) {
+    return (resp && resp.data) || {};
+}
+
 /**
  * Run a VQL query.
  * @param {string} vql - VQL statement (SELECT ... FROM object__c WHERE ...)
@@ -31,11 +36,11 @@ function ensureInit() {
  */
 export async function query(vql) {
     ensureInit();
-    const resp = await _sendEvent('query', { vql });
-    if (resp && resp.success === false) {
-        throw new Error(resp.error || 'Query failed');
+    const payload = unwrap(await _sendEvent('query', { vql }));
+    if (payload.success === false) {
+        throw new Error(payload.error || 'Query failed');
     }
-    return (resp && resp.records) || [];
+    return payload.records || [];
 }
 
 /**
@@ -46,11 +51,11 @@ export async function query(vql) {
  */
 export async function create(object, fields) {
     ensureInit();
-    const resp = await _sendEvent('create', { object, fields });
-    if (resp && resp.success === false) {
-        throw new Error(resp.error || 'Create failed');
+    const payload = unwrap(await _sendEvent('create', { object, fields }));
+    if (payload.success === false) {
+        throw new Error(payload.error || 'Create failed');
     }
-    return resp.id;
+    return payload.id;
 }
 
 /**
@@ -62,11 +67,11 @@ export async function create(object, fields) {
  */
 export async function update(object, id, fields) {
     ensureInit();
-    const resp = await _sendEvent('update', { object, id, fields });
-    if (resp && resp.success === false) {
-        throw new Error(resp.error || 'Update failed');
+    const payload = unwrap(await _sendEvent('update', { object, id, fields }));
+    if (payload.success === false) {
+        throw new Error(payload.error || 'Update failed');
     }
-    return resp.id;
+    return payload.id;
 }
 
 /**
@@ -77,9 +82,9 @@ export async function update(object, id, fields) {
  */
 export async function deleteRecord(object, id) {
     ensureInit();
-    const resp = await _sendEvent('delete', { object, id });
-    if (resp && resp.success === false) {
-        throw new Error(resp.error || 'Delete failed');
+    const payload = unwrap(await _sendEvent('delete', { object, id }));
+    if (payload.success === false) {
+        throw new Error(payload.error || 'Delete failed');
     }
 }
 
@@ -115,7 +120,7 @@ export async function fetchBoard(boardId) {
 export async function fetchFeedbackForBoard(boardId) {
     return query(
         "SELECT id, name__v, retro_board__c, author__c, category__c, content__c, " +
-        "ai_theme__c, vote_count__c FROM feedback_item__c " +
+        "theme__c, vote_count__c FROM feedback_item__c " +
         `WHERE retro_board__c = '${escapeVql(boardId)}'`
     );
 }
@@ -141,7 +146,7 @@ export async function fetchUsers() {
 
 export async function fetchAllFeedback() {
     return query(
-        "SELECT id, retro_board__c, category__c, ai_theme__c, vote_count__c FROM feedback_item__c"
+        "SELECT id, retro_board__c, category__c, theme__c, vote_count__c FROM feedback_item__c"
     );
 }
 

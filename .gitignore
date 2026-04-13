@@ -1,3 +1,11 @@
 __pycache__/
 *.pyc
 .env
+.DS_Store
+client/node_modules/
+client/dist/
+client/retrovault.zip
+server/vapil-settings.json
+server/plugin-settings.json
+server/target/
+server/deployment/

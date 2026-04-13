@@ -13,13 +13,35 @@
     <properties>
         <maven.compiler.source>11</maven.compiler.source>
         <maven.compiler.target>11</maven.compiler.target>
-        <vault.sdk.version>25.1.0</vault.sdk.version>
+        <vault.sdk.version>25.1.4-release11722</vault.sdk.version>
     </properties>
+
+    <repositories>
+        <repository>
+            <id>veevavault</id>
+            <url>https://repo.veevavault.com/maven</url>
+            <releases>
+                <enabled>true</enabled>
+                <updatePolicy>always</updatePolicy>
+            </releases>
+        </repository>
+    </repositories>
+
+    <pluginRepositories>
+        <pluginRepository>
+            <id>vaultjavasdk-maven-plugin</id>
+            <url>https://veeva.github.io/vaultjavasdk-maven-plugin/maven</url>
+            <releases>
+                <enabled>true</enabled>
+                <updatePolicy>always</updatePolicy>
+            </releases>
+        </pluginRepository>
+    </pluginRepositories>
 
     <dependencies>
         <dependency>
-            <groupId>com.veeva.public.vault</groupId>
-            <artifactId>vault-sdk-api</artifactId>
+            <groupId>com.veeva.vault.sdk</groupId>
+            <artifactId>vault-sdk</artifactId>
             <version>${vault.sdk.version}</version>
             <scope>provided</scope>
         </dependency>
@@ -28,9 +50,13 @@
     <build>
         <plugins>
             <plugin>
-                <groupId>com.veeva.public.vault</groupId>
-                <artifactId>vault-sdk-maven-plugin</artifactId>
-                <version>${vault.sdk.version}</version>
+                <groupId>com.veeva.vault.sdk</groupId>
+                <artifactId>vaultjavasdk-maven-plugin</artifactId>
+                <version>24.1.0</version>
+                <configuration>
+                    <pluginSettingsFilePath>${project.basedir}/plugin-settings.json</pluginSettingsFilePath>
+                    <vapilSettingsFilePath>${project.basedir}/vapil-settings.json</vapilSettingsFilePath>
+                </configuration>
             </plugin>
         </plugins>
     </build>
