@@ -1,15 +1,101 @@
 /* ==========================================================================
-   RetroVault - Vault UI Design System Theme
-   Styles registered in distribution-manifest.json and auto-injected
-   into the Shadow DOM by Vault.
+   RetroVault — Vault CRM Web design system theme
+   Token values are sourced from the Vault CRM (Web) Figma file via the
+   Figma Dev Mode MCP. Only tokens read directly from that file are marked
+   with a [Figma] comment; the rest are close approximations kept from the
+   earlier hand-rolled theme and can be replaced once their specs are read.
    ========================================================================== */
 
+:host, .vault-app {
+    /* ---- Figma-verified tokens ---- */
+    --vault-blue-default: #1453b8;            /* [Figma] $blue-default — Primary button, Info accent */
+    --vault-blue-lightest: #e3edfc;           /* [Figma] $blue-lightest — Info alert bg, focus ring */
+    --vault-blue-tint: #d1e1fa;               /* [Figma] Badge default bg — distinct from $blue-lightest */
+    --vault-green-default: #539137;           /* [Figma] $green-default — Success accent */
+    --vault-green-lightest: #e0f3e0;          /* [Figma] $green-lightest — Success alert bg */
+    --vault-orange-darkest: #cc6600;          /* [Figma] $orange-darkest — Warning accent */
+    --vault-orange-lightest: #ffefd5;         /* [Figma] $orange-lightest — Warning alert bg */
+    --vault-red-default: #ce1300;             /* [Figma] $red-default — Error accent */
+    --vault-red-lightest: #ffe2e2;            /* [Figma] $red-lightest — Error alert bg */
+    --vault-silver-lightest: #f8f8f8;         /* [Figma] $silver-lightest — Panel accent bg, page bg */
+    --vault-silver-light: #eee;               /* [Figma] $silver-light — Secondary button bg, panel border */
+    --vault-silver-default: #dadada;          /* [Figma] $silver-default — Secondary button border */
+    --vault-silver-dark: #cccccc;             /* [Figma] $silver-dark — Input underline default */
+    --vault-orange-default: #f8972b;          /* [Figma] $orange-default — Page Header bottom border */
+    --vault-blue-link: #0066cc;               /* [Figma] blue/link — Breadcrumb links */
+    --vault-black: #1d1d1d;                   /* [Figma] $black — Body text */
+    --vault-white: #ffffff;                   /* [Figma] $white */
+
+    /* ---- Approximated neutrals (not yet verified against Figma) ---- */
+    --vault-gray-900: #1d1d1d;                /* aliased to $black */
+    --vault-gray-700: #444444;
+    --vault-gray-600: #5c5c5c;
+    --vault-gray-500: #767676;
+    --vault-gray-400: #999999;
+    --vault-gray-300: #b0b0b0;
+    --vault-gray-200: #dadada;                /* aliased to $silver-default */
+    --vault-gray-100: #ebebeb;
+    --vault-gray-50:  #f4f4f4;
+
+    /* ---- Semantic aliases (what the rules actually reference) ---- */
+    --vault-primary:         var(--vault-blue-default);
+    --vault-primary-hover:   #0f3f8c;          /* darker shade, approximated */
+    --vault-primary-subtle:  var(--vault-blue-lightest);
+    --vault-success:         var(--vault-green-default);
+    --vault-success-subtle:  var(--vault-green-lightest);
+    --vault-warning:         var(--vault-orange-darkest);
+    --vault-warning-subtle:  var(--vault-orange-lightest);
+    --vault-danger:          var(--vault-red-default);
+    --vault-danger-subtle:   var(--vault-red-lightest);
+    --vault-surface:         var(--vault-white);
+    --vault-surface-muted:   var(--vault-silver-lightest); /* [Figma] Panel accent bg */
+    --vault-surface-panel:   var(--vault-silver-lightest); /* [Figma] Panel accent */
+    --vault-border:          var(--vault-silver-default);
+    --vault-border-subtle:   var(--vault-silver-light);    /* [Figma] Panel right-border */
+    --vault-border-strong:   var(--vault-gray-300);
+    --vault-text-primary:    var(--vault-black);
+    --vault-text-secondary:  var(--vault-gray-500);
+    --vault-text-on-brand:   var(--vault-white);
+    --vault-focus-ring:      rgba(20, 83, 184, 0.25); /* derived from $blue-default */
+
+    /* ---- Spacing scale (existing rhythm, now named) ---- */
+    --vault-space-1: 4px;
+    --vault-space-2: 8px;
+    --vault-space-3: 12px;
+    --vault-space-4: 16px;
+    --vault-space-5: 20px;
+    --vault-space-6: 24px;
+    --vault-space-8: 32px;
+    --vault-space-12: 48px;
+
+    /* ---- Radius / shadow / typography ---- */
+    --vault-radius: 4px;                      /* [Figma] Button rounded-[4px] */
+    --vault-radius-lg: 8px;
+    --vault-radius-pill: 12px;
+    --vault-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+    --vault-shadow-hover: 0 2px 8px rgba(0, 0, 0, 0.15);
+
+    --vault-font-family: 'Roboto', -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif; /* [Figma] Roboto */
+    --vault-font-size-xs: 11px;
+    --vault-font-size-sm: 12px;               /* [Figma] xs/regular 12px — base body */
+    --vault-font-size-md: 13px;
+    --vault-font-size-lg: 14px;
+    --vault-font-size-xl: 16px;
+    --vault-font-size-2xl: 18px;
+    --vault-font-size-title: 20px;            /* [Figma] lg/regular 20px — Page Header title */
+    --vault-font-size-3xl: 24px;
+    --vault-font-weight-regular: 400;
+    --vault-font-weight-medium: 500;
+    --vault-font-weight-semibold: 600;
+    --vault-font-weight-bold: 700;
+}
+
 .vault-app {
-    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
-    font-size: 14px;
+    font-family: var(--vault-font-family);
+    font-size: var(--vault-font-size-sm);
     line-height: 1.5;
-    color: #1A1A1A;
-    background: #F4F4F4;
+    color: var(--vault-text-primary);
+    background: var(--vault-surface-muted);
     min-height: 100vh;
     -webkit-font-smoothing: antialiased;
 }
@@ -18,206 +104,255 @@
     box-sizing: border-box;
 }
 
-/* Design tokens */
-:host, .vault-app {
-    --vault-blue-700: #0B5394;
-    --vault-blue-600: #0061D5;
-    --vault-blue-500: #0070D2;
-    --vault-blue-400: #1B96FF;
-    --vault-blue-100: #E1F0FF;
-    --vault-gray-900: #1A1A1A;
-    --vault-gray-800: #2E2E2E;
-    --vault-gray-700: #444444;
-    --vault-gray-600: #5C5C5C;
-    --vault-gray-500: #767676;
-    --vault-gray-400: #999999;
-    --vault-gray-300: #B0B0B0;
-    --vault-gray-200: #D4D4D4;
-    --vault-gray-100: #EBEBEB;
-    --vault-gray-50: #F4F4F4;
-    --vault-white: #FFFFFF;
-    --vault-green-500: #2E844A;
-    --vault-green-100: #E3F5E8;
-    --vault-yellow-500: #FE9339;
-    --vault-yellow-100: #FFF3E0;
-    --vault-red-500: #EA001E;
-    --vault-red-100: #FDEAEC;
-    --vault-radius: 4px;
-    --vault-radius-lg: 8px;
-    --vault-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
-    --vault-shadow-hover: 0 2px 8px rgba(0, 0, 0, 0.15);
+.vault-app a {
+    color: var(--vault-primary);
+    text-decoration: none;
+    cursor: pointer;
 }
-
-.vault-app a { color: #0070D2; text-decoration: none; cursor: pointer; }
-.vault-app a:hover { color: #0B5394; text-decoration: underline; }
+.vault-app a:hover {
+    color: var(--vault-primary-hover);
+    text-decoration: underline;
+}
 
 /* Layout */
 .vault-container {
     max-width: 1280px;
     margin: 0 auto;
-    padding: 0 24px;
+    padding: 0 var(--vault-space-6);
 }
 
 .vault-page {
-    padding-top: 24px;
-    padding-bottom: 48px;
+    padding-top: var(--vault-space-6);
+    padding-bottom: var(--vault-space-12);
 }
 
-/* Navigation */
-.vault-nav {
-    height: 56px;
-    background: #0B5394;
-    color: #FFFFFF;
+/* Tabs — [Figma] Tabs (CRM)/Dynamic/Tab, node 10866:220
+   Strip with continuous $silver-dark bottom border. Default tabs are
+   transparent text on the strip; selected tab "lifts" with a white bg,
+   top/left/right borders, and Bold text (no bottom border so it merges
+   with the panel below). 30px tall, 11px horizontal padding. */
+.vault-tabs {
     display: flex;
+    align-items: flex-end;
+    gap: 0;
+    padding: 0;
+    background: var(--vault-surface);
+    border-bottom: 1px solid var(--vault-silver-dark);
+}
+
+.vault-tab {
+    display: inline-flex;
     align-items: center;
-    padding: 0 24px;
-    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+    height: 30px;
+    padding: 0 11px;
+    margin-bottom: -1px;                 /* overlap the strip's bottom border */
+    border: 1px solid transparent;
+    border-radius: var(--vault-radius) var(--vault-radius) 0 0;
+    background: transparent;
+    color: var(--vault-text-primary);
+    font-size: var(--vault-font-size-sm);
+    font-weight: var(--vault-font-weight-regular);
+    line-height: 1;
+    text-decoration: none;
+    cursor: pointer;
+    font-family: inherit;
+    transition: background-color 0.15s ease;
+}
+
+.vault-tab:hover:not(.vault-tab--active) {
+    background: var(--vault-silver-light);
+    text-decoration: none;
+}
+
+.vault-tab--active {
+    background: var(--vault-surface);
+    border-color: var(--vault-silver-dark);
+    border-bottom-color: var(--vault-surface);  /* hide the line under the active tab */
+    font-weight: var(--vault-font-weight-bold);
+}
+
+.vault-tab:focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 2px var(--vault-focus-ring);
+}
+
+/* NavBar — RetroVault uses the canonical Vault tab strip for view switching,
+   with branding/user/actions in a single light row. */
+.vault-nav {
+    display: flex;
+    align-items: flex-end;
+    gap: var(--vault-space-4);
+    padding: var(--vault-space-3) var(--vault-space-6) 0;
+    background: var(--vault-surface);
+    border-bottom: 1px solid var(--vault-silver-dark);
 }
 
 .vault-nav__logo {
-    font-size: 18px;
-    font-weight: 700;
+    font-size: var(--vault-font-size-2xl);
+    font-weight: var(--vault-font-weight-bold);
     letter-spacing: -0.3px;
-    color: #FFFFFF;
-    margin-right: 32px;
+    color: var(--vault-text-primary);
+    margin-right: var(--vault-space-4);
+    padding-bottom: 6px;
     cursor: pointer;
 }
 
-.vault-nav__logo:hover { text-decoration: none; color: #FFFFFF; }
+.vault-nav__logo:hover { text-decoration: none; color: var(--vault-text-primary); }
 
 .vault-nav__links {
     display: flex;
-    gap: 4px;
+    align-items: flex-end;
+    gap: 0;
     flex: 1;
 }
 
+/* Each nav link is a Vault tab */
 .vault-nav__link {
-    color: rgba(255, 255, 255, 0.8);
-    padding: 8px 14px;
-    border-radius: 4px;
-    font-size: 13px;
-    font-weight: 500;
+    display: inline-flex;
+    align-items: center;
+    height: 30px;
+    padding: 0 11px;
+    margin-bottom: -1px;
+    border: 1px solid transparent;
+    border-radius: var(--vault-radius) var(--vault-radius) 0 0;
+    background: transparent;
+    color: var(--vault-text-primary);
+    font-size: var(--vault-font-size-sm);
+    font-weight: var(--vault-font-weight-regular);
+    line-height: 1;
     cursor: pointer;
-    transition: all 0.2s ease;
+    transition: background-color 0.15s ease;
 }
 
 .vault-nav__link:hover {
-    background: rgba(255, 255, 255, 0.15);
-    color: #FFFFFF;
+    background: var(--vault-silver-light);
+    color: var(--vault-text-primary);
     text-decoration: none;
 }
 
 .vault-nav__link--active {
-    background: rgba(255, 255, 255, 0.2);
-    color: #FFFFFF;
+    background: var(--vault-surface);
+    border-color: var(--vault-silver-dark);
+    border-bottom-color: var(--vault-surface);
+    font-weight: var(--vault-font-weight-bold);
+    color: var(--vault-text-primary);
 }
 
 .vault-nav__right {
     display: flex;
     align-items: center;
-    gap: 12px;
+    gap: var(--vault-space-3);
+    padding-bottom: 6px;
 }
 
 .vault-nav__user-label {
-    font-size: 12px;
-    color: rgba(255, 255, 255, 0.85);
+    font-size: var(--vault-font-size-sm);
+    color: var(--vault-text-secondary);
     font-family: monospace;
 }
 
-/* Page header */
+/* Page Header — [Figma] Page Header (CRM), node 10175:46777
+   Vault CRM signature: Roboto Regular 20px title, orange bottom border
+   accent. Subtitle is a RetroVault-only slot rendered in the "bottom
+   custom content" area. */
 .vault-page-header {
     display: flex;
-    align-items: center;
+    align-items: flex-start;
     justify-content: space-between;
-    padding: 24px 0 16px;
+    gap: var(--vault-space-2);
+    padding: var(--vault-space-2) var(--vault-space-3) 14px;
+    margin-bottom: var(--vault-space-6);
+    border-bottom: 2px solid var(--vault-orange-default);
 }
 
 .vault-page-header__title {
-    font-size: 24px;
-    font-weight: 700;
-    color: #1A1A1A;
+    font-size: var(--vault-font-size-title);
+    font-weight: var(--vault-font-weight-regular);
+    line-height: 1.2;
+    color: var(--vault-text-primary);
     margin: 0;
 }
 
 .vault-page-header__subtitle {
-    font-size: 14px;
-    color: #767676;
-    margin: 4px 0 0 0;
+    font-size: var(--vault-font-size-sm);
+    color: var(--vault-text-secondary);
+    margin: var(--vault-space-1) 0 0 0;
+    line-height: 1.4;
 }
 
 /* Cards */
 .vault-card {
-    background: #FFFFFF;
-    border: 1px solid #D4D4D4;
-    border-radius: 8px;
-    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+    background: var(--vault-surface);
+    border: 1px solid var(--vault-border);
+    border-radius: var(--vault-radius-lg);
+    box-shadow: var(--vault-shadow);
     transition: all 0.2s ease;
     overflow: hidden;
 }
 
 .vault-card--clickable { cursor: pointer; }
 .vault-card--clickable:hover {
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+    box-shadow: var(--vault-shadow-hover);
 }
 
 .vault-card__header {
-    padding: 16px 20px;
-    border-bottom: 1px solid #EBEBEB;
+    padding: var(--vault-space-4) var(--vault-space-5);
+    border-bottom: 1px solid var(--vault-border-subtle);
     display: flex;
     align-items: center;
     justify-content: space-between;
 }
 
 .vault-card__title {
-    font-size: 16px;
-    font-weight: 600;
-    color: #1A1A1A;
+    font-size: var(--vault-font-size-xl);
+    font-weight: var(--vault-font-weight-semibold);
+    color: var(--vault-text-primary);
 }
 
-.vault-card__body { padding: 16px 20px; }
+.vault-card__body { padding: var(--vault-space-4) var(--vault-space-5); }
 
 /* Board Card */
 .vault-board-card {
-    padding: 16px 20px;
+    padding: var(--vault-space-4) var(--vault-space-5);
     display: flex;
     flex-direction: column;
-    gap: 8px;
+    gap: var(--vault-space-2);
 }
 
 .vault-board-card__name {
-    font-size: 15px;
-    font-weight: 600;
-    color: #1A1A1A;
+    font-size: var(--vault-font-size-lg);
+    font-weight: var(--vault-font-weight-semibold);
+    color: var(--vault-text-primary);
 }
 
 .vault-board-card__meta {
     display: flex;
     align-items: center;
-    gap: 12px;
-    font-size: 13px;
-    color: #767676;
+    gap: var(--vault-space-3);
+    font-size: var(--vault-font-size-md);
+    color: var(--vault-text-secondary);
 }
 
 .vault-board-card__meta-item {
     display: flex;
     align-items: center;
-    gap: 4px;
+    gap: var(--vault-space-1);
 }
 
 /* Section */
-.vault-section { margin-bottom: 32px; }
+.vault-section { margin-bottom: var(--vault-space-8); }
 
 .vault-section__title {
-    font-size: 16px;
-    font-weight: 600;
-    color: #444444;
-    padding-bottom: 12px;
-    margin: 0 0 16px 0;
-    border-bottom: 2px solid #D4D4D4;
+    font-size: var(--vault-font-size-xl);
+    font-weight: var(--vault-font-weight-semibold);
+    color: var(--vault-gray-700);
+    padding-bottom: var(--vault-space-3);
+    margin: 0 0 var(--vault-space-4) 0;
+    border-bottom: 2px solid var(--vault-border);
 }
 
 /* Grid */
-.vault-grid { display: grid; gap: 16px; }
+.vault-grid { display: grid; gap: var(--vault-space-4); }
 .vault-grid--2 { grid-template-columns: repeat(2, 1fr); }
 .vault-grid--3 { grid-template-columns: repeat(3, 1fr); }
 .vault-grid--4 { grid-template-columns: repeat(4, 1fr); }
@@ -230,52 +365,55 @@
 .vault-columns {
     display: grid;
     grid-template-columns: repeat(2, 1fr);
-    gap: 16px;
-    margin-bottom: 32px;
+    gap: var(--vault-space-4);
+    margin-bottom: var(--vault-space-8);
 }
 
+/* [Figma] Panel (CRM), node 15517:14878 — flat container, silver-light border,
+   silver-lightest bg (accent variant). The colored __header is a RetroVault
+   addition; the Panel spec itself has no title slot. */
 .vault-column {
-    background: #F4F4F4;
-    border-radius: 8px;
-    border: 1px solid #D4D4D4;
+    background: var(--vault-surface-panel);
+    border-radius: var(--vault-radius-lg);
+    border: 1px solid var(--vault-border-subtle);
     min-height: 300px;
 }
 
 .vault-column__header {
-    padding: 12px 16px;
-    font-weight: 600;
-    font-size: 14px;
-    color: #FFFFFF;
-    border-radius: 8px 8px 0 0;
+    padding: var(--vault-space-3) var(--vault-space-4);
+    font-weight: var(--vault-font-weight-semibold);
+    font-size: var(--vault-font-size-md);
+    color: var(--vault-white);
+    border-radius: var(--vault-radius-lg) var(--vault-radius-lg) 0 0;
     display: flex;
     align-items: center;
     justify-content: space-between;
 }
 
-.vault-column__header--green { background: #2E844A; }
-.vault-column__header--red { background: #EA001E; }
-.vault-column__header--blue { background: #0070D2; }
+.vault-column__header--green { background: var(--vault-success); }
+.vault-column__header--red { background: var(--vault-danger); }
+.vault-column__header--blue { background: var(--vault-primary); }
 
 .vault-column__count {
     background: rgba(255, 255, 255, 0.3);
-    padding: 2px 8px;
-    border-radius: 12px;
-    font-size: 12px;
+    padding: 2px var(--vault-space-2);
+    border-radius: var(--vault-radius-pill);
+    font-size: var(--vault-font-size-sm);
 }
 
 .vault-column__body {
-    padding: 12px;
+    padding: var(--vault-space-3);
     display: flex;
     flex-direction: column;
-    gap: 8px;
+    gap: var(--vault-space-2);
 }
 
 /* Feedback Card */
 .vault-feedback-card {
-    background: #FFFFFF;
-    border: 1px solid #D4D4D4;
-    border-radius: 4px;
-    padding: 12px;
+    background: var(--vault-surface);
+    border: 1px solid var(--vault-border-subtle);
+    border-radius: var(--vault-radius);
+    padding: var(--vault-space-3);
 }
 
 .vault-feedback-card--clickable {
@@ -284,24 +422,24 @@
 }
 
 .vault-feedback-card--clickable:hover {
-    border-color: #2A7DE1;
-    box-shadow: 0 1px 3px rgba(42, 125, 225, 0.15);
+    border-color: var(--vault-primary);
+    box-shadow: 0 1px 3px var(--vault-focus-ring);
 }
 
 .vault-feedback-card__feature {
     display: inline-block;
-    font-size: 11px;
-    color: #2A7DE1;
-    background: #E8F1FC;
+    font-size: var(--vault-font-size-xs);
+    color: var(--vault-primary);
+    background: var(--vault-primary-subtle);
     border-radius: 3px;
     padding: 2px 6px;
-    margin-bottom: 8px;
+    margin-bottom: var(--vault-space-2);
 }
 
 .vault-feedback-card__content {
-    font-size: 13px;
-    color: #2E2E2E;
-    margin-bottom: 8px;
+    font-size: var(--vault-font-size-md);
+    color: var(--vault-text-primary);
+    margin-bottom: var(--vault-space-2);
     line-height: 1.5;
     white-space: pre-wrap;
 }
@@ -310,85 +448,124 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
-    font-size: 12px;
-    color: #767676;
+    font-size: var(--vault-font-size-sm);
+    color: var(--vault-text-secondary);
 }
 
-.vault-feedback-card__author { font-weight: 500; }
+.vault-feedback-card__author { font-weight: var(--vault-font-weight-medium); }
 
 .vault-feedback-card__actions {
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: var(--vault-space-2);
 }
 
 /* Vote button */
 .vault-vote-btn {
     display: inline-flex;
     align-items: center;
-    gap: 4px;
-    padding: 3px 8px;
-    border: 1px solid #B0B0B0;
-    border-radius: 12px;
-    background: #FFFFFF;
-    color: #5C5C5C;
-    font-size: 12px;
+    gap: var(--vault-space-1);
+    padding: 3px var(--vault-space-2);
+    border: 1px solid var(--vault-border-strong);
+    border-radius: var(--vault-radius-pill);
+    background: var(--vault-surface);
+    color: var(--vault-gray-600);
+    font-size: var(--vault-font-size-sm);
     cursor: pointer;
     transition: all 0.2s ease;
     font-family: inherit;
 }
 
 .vault-vote-btn:hover {
-    border-color: #0070D2;
-    color: #0070D2;
+    border-color: var(--vault-primary);
+    color: var(--vault-primary);
 }
 
 .vault-vote-btn--voted {
-    background: #E1F0FF;
-    border-color: #0070D2;
-    color: #0070D2;
-    font-weight: 600;
+    background: var(--vault-primary-subtle);
+    border-color: var(--vault-primary);
+    color: var(--vault-primary);
+    font-weight: var(--vault-font-weight-semibold);
 }
 
-/* Badges */
+/* Badge / Tag — [Figma] Tag (CRM), node 14269:508
+   Pattern: light tint background + $black text. The "Strong" modifier
+   flips to the darker tone background + white text. Padding 4px/8px,
+   11px pill radius, Roboto Regular 12px. Status-named modifiers
+   (--active, --closed, etc.) map to Tag semantic variants. */
 .vault-badge {
     display: inline-flex;
     align-items: center;
-    padding: 2px 10px;
-    border-radius: 12px;
-    font-size: 12px;
-    font-weight: 500;
-    line-height: 1.6;
+    padding: 4px var(--vault-space-2);
+    border: 1px solid transparent;
+    border-radius: 11px;
+    background: var(--vault-silver-light);
+    color: var(--vault-text-primary);
+    border-color: var(--vault-silver-light);
+    font-size: var(--vault-font-size-sm);
+    font-weight: var(--vault-font-weight-regular);
+    line-height: 1;
 }
 
-.vault-badge--active { background: #E3F5E8; color: #2E844A; }
-.vault-badge--closed { background: #EBEBEB; color: #5C5C5C; }
-.vault-badge--open { background: #FDEAEC; color: #EA001E; }
-.vault-badge--in_progress { background: #FFF3E0; color: #B86E00; }
-.vault-badge--done { background: #E3F5E8; color: #2E844A; }
+/* Tag semantic variants */
+.vault-badge--neutral,
+.vault-badge--closed {
+    background: var(--vault-silver-light);
+    border-color: var(--vault-silver-light);
+    color: var(--vault-text-primary);
+}
 
+.vault-badge--info,
 .vault-badge--theme {
-    background: #E1F0FF;
-    color: #0061D5;
-    font-size: 11px;
-    padding: 1px 8px;
+    background: var(--vault-blue-lightest);
+    border-color: var(--vault-blue-lightest);
+    color: var(--vault-text-primary);
 }
 
-/* Buttons */
+.vault-badge--success,
+.vault-badge--active,
+.vault-badge--done {
+    background: var(--vault-success-subtle);
+    border-color: var(--vault-success-subtle);
+    color: var(--vault-text-primary);
+}
+
+.vault-badge--warning,
+.vault-badge--in_progress {
+    background: var(--vault-warning-subtle);
+    border-color: var(--vault-warning-subtle);
+    color: var(--vault-text-primary);
+}
+
+.vault-badge--danger,
+.vault-badge--open {
+    background: var(--vault-danger-subtle);
+    border-color: var(--vault-danger-subtle);
+    color: var(--vault-text-primary);
+}
+
+/* Strong modifier — invert to saturated bg + white text */
+.vault-badge--neutral.vault-badge--strong { background: var(--vault-gray-500); border-color: var(--vault-gray-500); color: var(--vault-white); }
+.vault-badge--info.vault-badge--strong    { background: var(--vault-primary);    border-color: var(--vault-primary);    color: var(--vault-white); }
+.vault-badge--success.vault-badge--strong { background: var(--vault-success);    border-color: var(--vault-success);    color: var(--vault-white); }
+.vault-badge--warning.vault-badge--strong { background: var(--vault-warning);    border-color: var(--vault-warning);    color: var(--vault-white); }
+.vault-badge--danger.vault-badge--strong  { background: var(--vault-danger);     border-color: var(--vault-danger);     color: var(--vault-white); }
+
+/* Buttons — Figma reference: Roboto 12px, 4px radius, 9px/7px padding */
 .vault-btn {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    gap: 6px;
-    padding: 8px 16px;
-    border-radius: 4px;
-    font-size: 13px;
-    font-weight: 500;
+    gap: var(--vault-space-1);
+    padding: 7px 9px;                         /* [Figma] px-[9px] py-[7px] */
+    border-radius: var(--vault-radius);
+    font-size: var(--vault-font-size-sm);
+    font-weight: var(--vault-font-weight-regular);
     border: 1px solid transparent;
     cursor: pointer;
-    transition: all 0.2s ease;
+    transition: all 0.15s ease;
     font-family: inherit;
-    line-height: 1.4;
+    line-height: 1;
     text-decoration: none;
 }
 
@@ -397,112 +574,180 @@
     cursor: not-allowed;
 }
 
+.vault-btn:focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 2px var(--vault-focus-ring);
+}
+
 .vault-btn--primary {
-    background: #0070D2;
-    color: #FFFFFF;
-    border-color: #0070D2;
+    background: var(--vault-primary);
+    color: var(--vault-text-on-brand);
+    border-color: var(--vault-primary);
 }
 
 .vault-btn--primary:hover:not(:disabled) {
-    background: #0B5394;
-    border-color: #0B5394;
+    background: var(--vault-primary-hover);
+    border-color: var(--vault-primary-hover);
 }
 
+/* Secondary button — Figma: filled silver, not outline */
 .vault-btn--secondary {
-    background: #FFFFFF;
-    color: #444444;
-    border-color: #B0B0B0;
+    background: var(--vault-silver-light);
+    color: var(--vault-text-primary);
+    border-color: var(--vault-silver-default);
 }
 
 .vault-btn--secondary:hover:not(:disabled) {
-    background: #F4F4F4;
-    border-color: #999999;
+    background: var(--vault-silver-default);
+    border-color: var(--vault-gray-300);
 }
 
 .vault-btn--small {
-    padding: 4px 10px;
-    font-size: 12px;
+    padding: 4px 8px;
+    font-size: var(--vault-font-size-xs);
+}
+
+/* Action Bar Button — [Figma] Button (CRM)/Action Bar, node 14342:301
+   32px tall icon-only button, 4px radius, transparent default, silver-light
+   hover. Used for toolbar / page-header icon actions and the modal close. */
+.vault-action-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    height: 32px;
+    padding: 0 var(--vault-space-2);
+    border: 0;
+    border-radius: var(--vault-radius);
+    background: transparent;
+    color: var(--vault-text-primary);
+    font-size: 18px;
+    line-height: 1;
+    cursor: pointer;
+    transition: background-color 0.15s ease;
+    font-family: inherit;
+}
+
+.vault-action-btn:hover:not(:disabled) {
+    background: var(--vault-silver-light);
+}
+
+.vault-action-btn:active:not(:disabled) {
+    background: var(--vault-silver-default);
+}
+
+.vault-action-btn:focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 2px var(--vault-focus-ring);
+}
+
+.vault-action-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
 }
 
 /* Tables */
 .vault-table {
     width: 100%;
     border-collapse: collapse;
-    font-size: 13px;
+    font-size: var(--vault-font-size-md);
 }
 
 .vault-table th {
     text-align: left;
-    padding: 10px 16px;
-    background: #F4F4F4;
-    color: #5C5C5C;
-    font-weight: 600;
-    font-size: 12px;
+    padding: 10px var(--vault-space-4);
+    background: var(--vault-surface-muted);
+    color: var(--vault-gray-600);
+    font-weight: var(--vault-font-weight-semibold);
+    font-size: var(--vault-font-size-sm);
     text-transform: uppercase;
     letter-spacing: 0.5px;
-    border-bottom: 2px solid #D4D4D4;
+    border-bottom: 2px solid var(--vault-border);
 }
 
 .vault-table td {
-    padding: 10px 16px;
-    border-bottom: 1px solid #EBEBEB;
-    color: #2E2E2E;
+    padding: 10px var(--vault-space-4);
+    border-bottom: 1px solid var(--vault-gray-100);
+    color: var(--vault-text-primary);
 }
 
-.vault-table tr:hover td { background: #F4F4F4; }
+.vault-table tr:hover td { background: var(--vault-surface-muted); }
 
 /* Forms */
-.vault-form { display: flex; flex-direction: column; gap: 16px; }
+.vault-form { display: flex; flex-direction: column; gap: var(--vault-space-5); }
 
 .vault-form-group {
     display: flex;
     flex-direction: column;
-    gap: 6px;
+    gap: var(--vault-space-1);
 }
 
 .vault-label {
-    font-size: 13px;
-    font-weight: 600;
-    color: #444444;
+    font-size: var(--vault-font-size-sm);
+    font-weight: var(--vault-font-weight-regular);
+    color: var(--vault-text-secondary);
 }
 
+/* Inputs — [Figma] Input/Text Field, node 23213:24350
+   Underline-only: no box border, no radius, no bg. 1px bottom-border
+   $silver-dark (#ccc) default, $blue-default (#1453b8) focus,
+   $red-default (#ce1300) error. Min-height 30px, Roboto 12px, 8px left padding. */
 .vault-input,
 .vault-select,
 .vault-textarea {
-    padding: 8px 12px;
-    border: 1px solid #B0B0B0;
-    border-radius: 4px;
-    font-size: 14px;
-    font-family: inherit;
-    color: #1A1A1A;
-    background: #FFFFFF;
-    transition: all 0.2s ease;
-    outline: none;
+    display: block;
     width: 100%;
+    min-height: 30px;
+    padding: 8px var(--vault-space-1) 7px var(--vault-space-2);
+    border: 0;
+    border-bottom: 1px solid var(--vault-silver-dark);
+    border-radius: 0;
+    background: transparent;
+    font-size: var(--vault-font-size-sm);
+    font-family: inherit;
+    color: var(--vault-text-primary);
+    transition: border-color 0.15s ease;
+    outline: none;
 }
 
 .vault-input:focus,
 .vault-select:focus,
 .vault-textarea:focus {
-    border-color: #0070D2;
-    box-shadow: 0 0 0 2px rgba(0, 112, 210, 0.15);
+    border-bottom-color: var(--vault-primary);
+}
+
+.vault-input:disabled,
+.vault-select:disabled,
+.vault-textarea:disabled {
+    color: var(--vault-text-secondary);
+    cursor: not-allowed;
+}
+
+.vault-input--error,
+.vault-select--error,
+.vault-textarea--error {
+    border-bottom-color: var(--vault-danger);
 }
 
 .vault-textarea {
     min-height: 80px;
     resize: vertical;
+    line-height: 1.5;
 }
 
-.vault-select { cursor: pointer; }
+.vault-select {
+    cursor: pointer;
+    appearance: auto;               /* keep native dropdown indicator */
+}
 
+/* In-cell status select — not covered by a Figma spec yet; keep compact. */
 .vault-status-select {
-    padding: 4px 8px;
-    border: 1px solid #B0B0B0;
-    border-radius: 4px;
-    font-size: 12px;
+    padding: 4px var(--vault-space-2);
+    border: 1px solid var(--vault-silver-default);
+    border-radius: var(--vault-radius);
+    font-size: var(--vault-font-size-sm);
     font-family: inherit;
     cursor: pointer;
-    background: #FFFFFF;
+    background: var(--vault-surface);
 }
 
 /* Modal */
@@ -519,8 +764,8 @@
 .vault-modal-overlay--visible { display: flex; }
 
 .vault-modal {
-    background: #FFFFFF;
-    border-radius: 8px;
+    background: var(--vault-surface);
+    border-radius: var(--vault-radius-lg);
     box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
     width: 100%;
     max-width: 520px;
@@ -529,56 +774,79 @@
 }
 
 .vault-modal__header {
-    padding: 16px 20px;
-    border-bottom: 1px solid #D4D4D4;
+    padding: var(--vault-space-4) var(--vault-space-5);
+    border-bottom: 1px solid var(--vault-border);
     display: flex;
     align-items: center;
     justify-content: space-between;
 }
 
 .vault-modal__title {
-    font-size: 16px;
-    font-weight: 600;
+    font-size: var(--vault-font-size-xl);
+    font-weight: var(--vault-font-weight-semibold);
 }
 
+/* Modal close — uses the Action Bar Button visual treatment */
 .vault-modal__close {
-    background: none;
-    border: none;
-    font-size: 20px;
-    color: #767676;
-    cursor: pointer;
-    padding: 4px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    height: 32px;
+    padding: 0 var(--vault-space-2);
+    border: 0;
+    border-radius: var(--vault-radius);
+    background: transparent;
+    color: var(--vault-text-secondary);
+    font-size: 18px;
     line-height: 1;
+    cursor: pointer;
+    transition: background-color 0.15s ease;
+    font-family: inherit;
 }
 
-.vault-modal__body { padding: 20px; }
+.vault-modal__close:hover {
+    background: var(--vault-silver-light);
+    color: var(--vault-text-primary);
+}
+
+.vault-modal__body { padding: var(--vault-space-5); }
 
 .vault-modal__footer {
-    padding: 12px 20px;
-    border-top: 1px solid #D4D4D4;
+    padding: var(--vault-space-3) var(--vault-space-5);
+    border-top: 1px solid var(--vault-border);
     display: flex;
     justify-content: flex-end;
-    gap: 8px;
+    gap: var(--vault-space-2);
 }
 
-/* Toast */
+/* Toast — Contextual Alert pattern: light bg + colored border + dark text */
 .vault-toast {
     position: fixed;
-    bottom: 24px;
-    right: 24px;
-    padding: 12px 20px;
-    border-radius: 4px;
-    color: #FFFFFF;
-    font-size: 14px;
-    font-weight: 500;
+    bottom: var(--vault-space-6);
+    right: var(--vault-space-6);
+    padding: 10px var(--vault-space-3);
+    border-radius: var(--vault-radius);
+    color: var(--vault-text-primary);
+    font-size: var(--vault-font-size-sm);
+    font-weight: var(--vault-font-weight-bold);
     z-index: 3000;
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+    box-shadow: var(--vault-shadow-hover);
+    border-bottom: 2px solid;
     animation: vault-toast-in 0.3s ease;
 }
 
-.vault-toast--success { background: #2E844A; }
-.vault-toast--error { background: #EA001E; }
-.vault-toast--info { background: #0070D2; }
+.vault-toast--success {
+    background: var(--vault-success-subtle);
+    border-bottom-color: var(--vault-success);
+}
+.vault-toast--error {
+    background: var(--vault-danger-subtle);
+    border-bottom-color: var(--vault-danger);
+}
+.vault-toast--info {
+    background: var(--vault-primary-subtle);
+    border-bottom-color: var(--vault-primary);
+}
 
 @keyframes vault-toast-in {
     from { opacity: 0; transform: translateY(16px); }
@@ -590,14 +858,14 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    padding: 48px;
+    padding: var(--vault-space-12);
 }
 
 .vault-spinner__ring {
     width: 36px;
     height: 36px;
-    border: 3px solid #D4D4D4;
-    border-top-color: #0070D2;
+    border: 3px solid var(--vault-border);
+    border-top-color: var(--vault-primary);
     border-radius: 50%;
     animation: vault-spin 0.8s linear infinite;
 }
@@ -607,27 +875,27 @@
 /* Empty State */
 .vault-empty {
     text-align: center;
-    padding: 48px 24px;
-    color: #999999;
+    padding: var(--vault-space-12) var(--vault-space-6);
+    color: var(--vault-gray-400);
 }
 
-.vault-empty__icon { font-size: 48px; margin-bottom: 12px; }
-.vault-empty__text { font-size: 14px; }
+.vault-empty__icon { font-size: var(--vault-space-12); margin-bottom: var(--vault-space-3); }
+.vault-empty__text { font-size: var(--vault-font-size-md); }
 
 /* Bar Chart */
-.vault-bar-chart { display: flex; flex-direction: column; gap: 12px; }
+.vault-bar-chart { display: flex; flex-direction: column; gap: var(--vault-space-3); }
 
 .vault-bar-row {
     display: flex;
     align-items: center;
-    gap: 12px;
+    gap: var(--vault-space-3);
 }
 
 .vault-bar-label {
     width: 140px;
-    font-size: 13px;
-    font-weight: 500;
-    color: #444444;
+    font-size: var(--vault-font-size-md);
+    font-weight: var(--vault-font-weight-medium);
+    color: var(--vault-gray-700);
     text-align: right;
     flex-shrink: 0;
 }
@@ -635,67 +903,67 @@
 .vault-bar-track {
     flex: 1;
     height: 24px;
-    background: #EBEBEB;
-    border-radius: 12px;
+    background: var(--vault-gray-100);
+    border-radius: var(--vault-radius-pill);
     overflow: hidden;
     position: relative;
 }
 
 .vault-bar-fill {
     height: 100%;
-    border-radius: 12px;
+    border-radius: var(--vault-radius-pill);
     transition: width 0.5s ease;
     display: flex;
     align-items: center;
     padding-left: 10px;
-    font-size: 12px;
-    font-weight: 600;
-    color: #FFFFFF;
+    font-size: var(--vault-font-size-sm);
+    font-weight: var(--vault-font-weight-semibold);
+    color: var(--vault-white);
     min-width: fit-content;
 }
 
-.vault-bar-fill--green { background: #2E844A; }
-.vault-bar-fill--red { background: #EA001E; }
-.vault-bar-fill--blue { background: #0070D2; }
+.vault-bar-fill--green { background: var(--vault-success); }
+.vault-bar-fill--red { background: var(--vault-danger); }
+.vault-bar-fill--blue { background: var(--vault-primary); }
 
 .vault-bar-value {
-    font-size: 13px;
-    font-weight: 600;
-    color: #444444;
+    font-size: var(--vault-font-size-md);
+    font-weight: var(--vault-font-weight-semibold);
+    color: var(--vault-gray-700);
     width: 50px;
     flex-shrink: 0;
 }
 
-/* Seed Log */
+/* Seed Log — developer-only, left on a dark monospace theme */
 .seed-log {
     font-family: monospace;
-    font-size: 12px;
-    background: #1A1A1A;
+    font-size: var(--vault-font-size-sm);
+    background: var(--vault-black);
     color: #adff2f;
-    padding: 16px;
-    border-radius: 8px;
+    padding: var(--vault-space-4);
+    border-radius: var(--vault-radius-lg);
     max-height: 500px;
     overflow-y: auto;
 }
 
 .seed-log__line { white-space: pre-wrap; padding: 1px 0; }
-.seed-log__line.error { color: #ff4444; }
-.seed-log__line.info { color: #4fc3f7; }
-.seed-log__line.success { color: #66bb6a; }
+.seed-log__line.error { color: var(--vault-danger); }
+.seed-log__line.info { color: var(--vault-primary); }
+.seed-log__line.success { color: var(--vault-success); }
 
 /* Utilities */
-.vault-mt-8 { margin-top: 8px; }
-.vault-mt-16 { margin-top: 16px; }
-.vault-mt-24 { margin-top: 24px; }
-.vault-mb-8 { margin-bottom: 8px; }
-.vault-mb-16 { margin-bottom: 16px; }
-.vault-mb-24 { margin-bottom: 24px; }
+.vault-mt-8 { margin-top: var(--vault-space-2); }
+.vault-mt-16 { margin-top: var(--vault-space-4); }
+.vault-mt-24 { margin-top: var(--vault-space-6); }
+.vault-mb-8 { margin-bottom: var(--vault-space-2); }
+.vault-mb-16 { margin-bottom: var(--vault-space-4); }
+.vault-mb-24 { margin-bottom: var(--vault-space-6); }
 .vault-flex { display: flex; }
 .vault-flex-center { display: flex; align-items: center; }
 .vault-flex-between { display: flex; align-items: center; justify-content: space-between; }
-.vault-gap-8 { gap: 8px; }
-.vault-gap-16 { gap: 16px; }
-.vault-text-muted { color: #767676; }
-.vault-text-small { font-size: 12px; }
-.vault-text-bold { font-weight: 600; }
+.vault-gap-8 { gap: var(--vault-space-2); }
+.vault-gap-16 { gap: var(--vault-space-4); }
+.vault-text-muted { color: var(--vault-text-secondary); }
+.vault-text-small { font-size: var(--vault-font-size-sm); }
+.vault-text-bold { font-weight: var(--vault-font-weight-semibold); }
 .vault-hidden { display: none !important; }
