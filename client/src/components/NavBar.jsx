@@ -10,7 +10,7 @@ export default function NavBar({ activePage, navigate }) {
 
     return (
         <nav className="vault-nav">
-            <a className="vault-nav__logo" onClick={() => navigate('dashboard')}>RetroVault</a>
+            <a className="vault-nav__logo" onClick={() => navigate('dashboard')}>Retro Boards</a>
             <div className="vault-nav__links">
                 {links.map(l => (
                     <a
@@ -28,12 +28,6 @@ export default function NavBar({ activePage, navigate }) {
                         User: {currentUserId.slice(0, 8)}...
                     </span>
                 )}
-                <button
-                    className="vault-btn vault-btn--small vault-btn--primary"
-                    onClick={() => navigate('create-board')}
-                >
-                    + New Board
-                </button>
             </div>
         </nav>
     );

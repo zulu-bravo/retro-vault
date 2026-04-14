@@ -1,11 +1,12 @@
 import React, { useEffect, useState } from 'react';
-import { fetchTeams, fetchBoard, create, update, getCurrentUserId } from '../api/vault';
+import { fetchTeams, fetchBoard, create, update, getCurrentUserId, getCurrentUserName, userName } from '../api/vault';
 import Spinner from '../components/Spinner';
 import { toISODate } from '../utils/format';
 
 export default function CreateBoard({ boardId, navigate, showToast }) {
     const isEdit = !!boardId;
     const currentUserId = getCurrentUserId();
+    const currentUserName = getCurrentUserName();
     const [loading, setLoading] = useState(true);
     const [teams, setTeams] = useState([]);
     const [submitting, setSubmitting] = useState(false);
@@ -13,6 +14,7 @@ export default function CreateBoard({ boardId, navigate, showToast }) {
     const [name, setName] = useState('');
     const [teamId, setTeamId] = useState('');
     const [facilitatorId, setFacilitatorId] = useState('');
+    const [facilitatorDisplay, setFacilitatorDisplay] = useState('');
     const [releaseTag, setReleaseTag] = useState('');
     const [boardDate, setBoardDate] = useState(toISODate(new Date()));
     const [status, setStatus] = useState('active__c');
@@ -30,12 +32,14 @@ export default function CreateBoard({ boardId, navigate, showToast }) {
                     setName(existing.name__v || '');
                     setTeamId(existing.team__c || '');
                     setFacilitatorId(existing.facilitator__c || currentUserId || '');
+                    setFacilitatorDisplay(userName(existing, 'facilitator') || currentUserName || currentUserId || '');
                     setReleaseTag(existing.release_tag__c || '');
                     setBoardDate(existing.board_date__c || toISODate(new Date()));
                     setStatus(existing.status__c || 'active__c');
                     setFeatures(existing.features__c || '');
                 } else {
                     setFacilitatorId(currentUserId || '');
+                    setFacilitatorDisplay(currentUserName || currentUserId || '');
                 }
             } catch (err) {
                 showToast('Failed to load form data: ' + err.message, 'error');
@@ -121,7 +125,7 @@ export default function CreateBoard({ boardId, navigate, showToast }) {
                             <input
                                 className="vault-input"
                                 type="text"
-                                value={facilitatorId}
+                                value={facilitatorDisplay}
                                 disabled
                                 title="Auto-assigned to the current user. Change via the Vault admin UI if needed."
                             />

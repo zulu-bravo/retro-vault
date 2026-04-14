@@ -6,16 +6,42 @@
  * via four generic events: query, create, update, delete.
  */
 
+import { vaultApiClient } from '@veeva/vault';
+
 let _sendEvent = null;
 let _currentUserId = null;
+let _currentUserName = null;
 
 export function initApi(sendEvent, userId) {
     _sendEvent = sendEvent;
     _currentUserId = userId;
+    // Fetch the current user's name via REST (vaultApiClient bypasses the
+    // SDK restriction on user__sys queries). Fire-and-forget.
+    loadCurrentUserName();
 }
 
 export function getCurrentUserId() {
     return _currentUserId;
+}
+
+export function getCurrentUserName() {
+    return _currentUserName;
+}
+
+async function loadCurrentUserName() {
+    try {
+        const resp = await vaultApiClient.fetch('/v25.1/objects/users/me', {
+            headers: { Accept: 'application/json' }
+        });
+        const json = await resp.json();
+        const user = json?.users?.[0]?.user;
+        if (user) {
+            const full = [user.user_first_name__v, user.user_last_name__v].filter(Boolean).join(' ').trim();
+            _currentUserName = full || user.user_name__v || null;
+        }
+    } catch (err) {
+        console.warn('[RetroVault] Could not load current user name:', err.message);
+    }
 }
 
 function ensureInit() {
