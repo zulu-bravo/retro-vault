@@ -100,8 +100,8 @@ export default function BoardView({ boardId, navigate, showToast }) {
         try {
             if (existingVoteId) {
                 // Real delete (supported in Custom Pages)
-                await deleteRecord('vote__c', existingVoteId);
-                await update('feedback_item__c', feedbackItemId, {
+                await deleteRecord('retro_vote__c', existingVoteId);
+                await update('retro_feedback__c', feedbackItemId, {
                     vote_count__c: Math.max(0, currentCount - 1)
                 });
                 setUserVotes(prev => {
@@ -113,12 +113,12 @@ export default function BoardView({ boardId, navigate, showToast }) {
                     fi.id === feedbackItemId ? { ...fi, vote_count__c: Math.max(0, currentCount - 1) } : fi
                 ));
             } else {
-                const voteId = await create('vote__c', {
+                const voteId = await create('retro_vote__c', {
                     name__v: `${feedbackItemId}_${currentUserId}`.slice(0, 80),
                     feedback_item__c: feedbackItemId,
                     voter__c: currentUserId
                 });
-                await update('feedback_item__c', feedbackItemId, {
+                await update('retro_feedback__c', feedbackItemId, {
                     vote_count__c: currentCount + 1
                 });
                 setUserVotes(prev => ({ ...prev, [feedbackItemId]: voteId }));
@@ -161,7 +161,7 @@ export default function BoardView({ boardId, navigate, showToast }) {
                     theme__c: fbTheme || null,
                     feature__c: fbFeature || null
                 };
-                await update('feedback_item__c', fbModal.id, updates);
+                await update('retro_feedback__c', fbModal.id, updates);
                 setFeedback(prev => prev.map(fi =>
                     fi.id === fbModal.id ? { ...fi, ...updates } : fi
                 ));
@@ -178,7 +178,7 @@ export default function BoardView({ boardId, navigate, showToast }) {
                 if (fbTheme) fields.theme__c = fbTheme;
                 if (fbFeature) fields.feature__c = fbFeature;
 
-                const newId = await create('feedback_item__c', fields);
+                const newId = await create('retro_feedback__c', fields);
                 setFeedback(prev => [...prev, { id: newId, ...fields }]);
                 showToast('Feedback added!', 'success');
             }
@@ -204,7 +204,7 @@ export default function BoardView({ boardId, navigate, showToast }) {
             };
             if (aiDue) fields.due_date__c = aiDue;
 
-            const newId = await create('action_item__c', fields);
+            const newId = await create('retro_action__c', fields);
             setActions(prev => [...prev, { id: newId, ...fields }]);
             setAiModal(false);
             setAiTitle('');
@@ -221,7 +221,7 @@ export default function BoardView({ boardId, navigate, showToast }) {
             if (newStatus === 'done__c') {
                 fields.completed_at__c = new Date().toISOString();
             }
-            await update('action_item__c', actionId, fields);
+            await update('retro_action__c', actionId, fields);
             setActions(prev => prev.map(a =>
                 a.id === actionId ? { ...a, ...fields } : a
             ));

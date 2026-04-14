@@ -1,4 +1,4 @@
-RECREATE Object action_item__c (
+RECREATE Object retro_action__c (
     label('Action Item'),
     label_plural('Action Items'),
     active(true),
@@ -7,7 +7,7 @@ RECREATE Object action_item__c (
     description('Action item created from a retrospective')
 );
 
-ALTER Object action_item__c (
+ALTER Object retro_action__c (
     add Field retro_board__c (
         label('Retro Board'),
         type('ObjectReference'),
@@ -19,7 +19,7 @@ ALTER Object action_item__c (
     )
 );
 
-ALTER Object action_item__c (
+ALTER Object retro_action__c (
     add Field owner__c (
         label('Owner'),
         type('ObjectReference'),
@@ -31,7 +31,7 @@ ALTER Object action_item__c (
     )
 );
 
-ALTER Object action_item__c (
+ALTER Object retro_action__c (
     add Field status__c (
         label('Status'),
         type('Picklist'),
@@ -42,7 +42,7 @@ ALTER Object action_item__c (
     )
 );
 
-ALTER Object action_item__c (
+ALTER Object retro_action__c (
     add Field due_date__c (
         label('Due Date'),
         type('Date'),
@@ -52,7 +52,7 @@ ALTER Object action_item__c (
     )
 );
 
-ALTER Object action_item__c (
+ALTER Object retro_action__c (
     add Field completed_at__c (
         label('Completed At'),
         type('DateTime'),

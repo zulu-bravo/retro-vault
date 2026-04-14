@@ -1,4 +1,4 @@
-RECREATE Object team__c (
+RECREATE Object retro_team__c (
     label('Team'),
     label_plural('Teams'),
     active(true),

@@ -98,7 +98,7 @@ export function escapeVql(str) {
 }
 
 export async function fetchTeams() {
-    return query("SELECT id, name__v FROM team__c ORDER BY name__v ASC");
+    return query("SELECT id, name__v FROM retro_team__c ORDER BY name__v ASC");
 }
 
 // Note: this Vault's SDK blocks direct queries on `user__sys`, so we pull
@@ -127,7 +127,7 @@ export async function fetchFeedbackForBoard(boardId) {
     return query(
         "SELECT id, name__v, retro_board__c, author__c, author__cr.name__v, " +
         "category__c, content__c, theme__c, feature__c, vote_count__c " +
-        "FROM feedback_item__c " +
+        "FROM retro_feedback__c " +
         `WHERE retro_board__c = '${escapeVql(boardId)}'`
     );
 }
@@ -135,14 +135,14 @@ export async function fetchFeedbackForBoard(boardId) {
 export async function fetchActionsForBoard(boardId) {
     return query(
         "SELECT id, name__v, retro_board__c, owner__c, owner__cr.name__v, " +
-        "status__c, due_date__c, completed_at__c FROM action_item__c " +
+        "status__c, due_date__c, completed_at__c FROM retro_action__c " +
         `WHERE retro_board__c = '${escapeVql(boardId)}'`
     );
 }
 
 export async function fetchVotesForUser(userId) {
     return query(
-        "SELECT id, feedback_item__c, voter__c FROM vote__c " +
+        "SELECT id, feedback_item__c, voter__c FROM retro_vote__c " +
         `WHERE voter__c = '${escapeVql(userId)}'`
     );
 }
@@ -154,12 +154,12 @@ export function userName(row, prefix) {
 
 export async function fetchAllFeedback() {
     return query(
-        "SELECT id, retro_board__c, category__c, theme__c, vote_count__c FROM feedback_item__c"
+        "SELECT id, retro_board__c, category__c, theme__c, vote_count__c FROM retro_feedback__c"
     );
 }
 
 export async function fetchAllActions() {
     return query(
-        "SELECT id, retro_board__c, status__c FROM action_item__c"
+        "SELECT id, retro_board__c, status__c FROM retro_action__c"
     );
 }

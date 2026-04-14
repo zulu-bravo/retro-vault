@@ -31,7 +31,7 @@ export default function SeedData({ navigate, showToast }) {
             ];
             const teamIds = [];
             for (const t of teamData) {
-                const id = await create('team__c', t);
+                const id = await create('retro_team__c', t);
                 teamIds.push(id);
                 append(`  Created team: ${t.name__v}`, 'success');
             }
@@ -83,7 +83,7 @@ export default function SeedData({ navigate, showToast }) {
             const feedbackVotes = [];
             for (let i = 0; i < feedbackData.length; i++) {
                 const fd = feedbackData[i];
-                const id = await create('feedback_item__c', {
+                const id = await create('retro_feedback__c', {
                     name__v: fd.content.substring(0, 80),
                     retro_board__c: boardIds[fd.board],
                     author__c: u[fd.author].id,
@@ -120,7 +120,7 @@ export default function SeedData({ navigate, showToast }) {
                     due_date__c: ad.due
                 };
                 if (ad.completed) fields.completed_at__c = ad.completed;
-                await create('action_item__c', fields);
+                await create('retro_action__c', fields);
             }
             append(`  Created all ${actionData.length} action items`, 'success');
 
@@ -129,7 +129,7 @@ export default function SeedData({ navigate, showToast }) {
             for (let fi = 0; fi < feedbackIds.length; fi++) {
                 const numVotes = Math.min(feedbackVotes[fi], u.length);
                 for (let vi = 0; vi < numVotes; vi++) {
-                    await create('vote__c', {
+                    await create('retro_vote__c', {
                         name__v: `${feedbackIds[fi]}_${u[vi].id}`.slice(0, 80),
                         feedback_item__c: feedbackIds[fi],
                         voter__c: u[vi].id

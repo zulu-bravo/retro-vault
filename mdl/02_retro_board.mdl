@@ -23,7 +23,7 @@ ALTER Object retro_board__c (
     add Field team__c (
         label('Team'),
         type('ObjectReference'),
-        object('team__c'),
+        object('retro_team__c'),
         relationship_type('reference'),
         active(true),
         required(true),

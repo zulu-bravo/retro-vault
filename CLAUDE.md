@@ -43,27 +43,29 @@ The app is **deployed and working** on `zied.vaultdev.com`:
 ## Data Model
 
 ```
-team__c
+retro_team__c
   name__v (String, required)
 
 retro_board__c
   name__v (String, required)
   facilitator__c -> user__sys (required)
-  team__c -> team__c (required)
+  team__c -> retro_team__c (required)    ← field name unchanged after object rename
   release_tag__c (String)
+  features__c (String, max_length 1500)
   board_date__c (Date, required)
   status__c (Picklist: board_status__c, required)
 
-feedback_item__c
+retro_feedback__c
   name__v (String) - summary
   retro_board__c -> retro_board__c (required)
   author__c -> user__sys (required)
   category__c (Picklist: feedback_category__c, required)
   content__c (String, max_length 1500)
-  theme__c (Picklist: ai_theme__c)   ← field name is theme__c, picklist is ai_theme__c
+  theme__c (Picklist: ai_theme__c)      ← field is theme__c, picklist is ai_theme__c
+  feature__c (String, max_length 200)
   vote_count__c (Number)
 
-action_item__c
+retro_action__c
   name__v (String, required) - title
   retro_board__c -> retro_board__c (required)
   owner__c -> user__sys
@@ -71,9 +73,9 @@ action_item__c
   due_date__c (Date)
   completed_at__c (DateTime)
 
-vote__c
+retro_vote__c
   name__v (String) - composite key feedbackId_voterId
-  feedback_item__c -> feedback_item__c (required)
+  feedback_item__c -> retro_feedback__c (required)  ← field name unchanged after rename
   voter__c -> user__sys (required)
 ```
 

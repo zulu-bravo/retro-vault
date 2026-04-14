@@ -1,4 +1,4 @@
-RECREATE Object vote__c (
+RECREATE Object retro_vote__c (
     label('Vote'),
     label_plural('Votes'),
     active(true),
@@ -7,11 +7,11 @@ RECREATE Object vote__c (
     description('Upvote on a feedback item, one per user per item')
 );
 
-ALTER Object vote__c (
+ALTER Object retro_vote__c (
     add Field feedback_item__c (
         label('Feedback Item'),
         type('ObjectReference'),
-        object('feedback_item__c'),
+        object('retro_feedback__c'),
         relationship_type('reference'),
         active(true),
         required(true),
@@ -19,7 +19,7 @@ ALTER Object vote__c (
     )
 );
 
-ALTER Object vote__c (
+ALTER Object retro_vote__c (
     add Field voter__c (
         label('Voter'),
         type('ObjectReference'),

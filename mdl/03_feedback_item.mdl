@@ -1,4 +1,4 @@
-RECREATE Object feedback_item__c (
+RECREATE Object retro_feedback__c (
     label('Feedback Item'),
     label_plural('Feedback Items'),
     active(true),
@@ -7,7 +7,7 @@ RECREATE Object feedback_item__c (
     description('Individual feedback entry on a retro board')
 );
 
-ALTER Object feedback_item__c (
+ALTER Object retro_feedback__c (
     add Field retro_board__c (
         label('Retro Board'),
         type('ObjectReference'),
@@ -19,7 +19,7 @@ ALTER Object feedback_item__c (
     )
 );
 
-ALTER Object feedback_item__c (
+ALTER Object retro_feedback__c (
     add Field author__c (
         label('Author'),
         type('ObjectReference'),
@@ -31,7 +31,7 @@ ALTER Object feedback_item__c (
     )
 );
 
-ALTER Object feedback_item__c (
+ALTER Object retro_feedback__c (
     add Field category__c (
         label('Category'),
         type('Picklist'),
@@ -42,7 +42,7 @@ ALTER Object feedback_item__c (
     )
 );
 
-ALTER Object feedback_item__c (
+ALTER Object retro_feedback__c (
     add Field content__c (
         label('Content'),
         type('String'),
@@ -53,7 +53,7 @@ ALTER Object feedback_item__c (
     )
 );
 
-ALTER Object feedback_item__c (
+ALTER Object retro_feedback__c (
     add Field theme__c (
         label('Theme'),
         type('Picklist'),
@@ -64,7 +64,7 @@ ALTER Object feedback_item__c (
     )
 );
 
-ALTER Object feedback_item__c (
+ALTER Object retro_feedback__c (
     add Field feature__c (
         label('Feature'),
         type('String'),
@@ -75,7 +75,7 @@ ALTER Object feedback_item__c (
     )
 );
 
-ALTER Object feedback_item__c (
+ALTER Object retro_feedback__c (
     add Field vote_count__c (
         label('Vote Count'),
         type('Number'),
