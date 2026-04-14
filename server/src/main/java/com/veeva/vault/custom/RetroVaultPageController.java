@@ -149,8 +149,13 @@ public class RetroVaultPageController implements PageController {
         ValueType<?> type = fieldType(fieldName);
 
         if (type == ValueType.PICKLIST_VALUES) {
+            // All RetroVault picklists are single-select. Flatten to a string
+            // so the client can compare/assign directly (<select value={...} />).
             List<String> list = row.getValue(fieldName, ValueType.PICKLIST_VALUES);
-            return list == null ? null : toJsonArray(list, jsonService);
+            if (list == null || list.isEmpty()) {
+                return null;
+            }
+            return list.get(0);
         }
         if (type == ValueType.DATE) {
             LocalDate d = row.getValue(fieldName, ValueType.DATE);
