@@ -361,22 +361,29 @@
     .vault-grid--2, .vault-grid--3, .vault-grid--4 { grid-template-columns: 1fr; }
 }
 
-/* Feedback Columns */
+/* Feedback Columns — 3-column layout: Went Well | To Improve | Action Items */
 .vault-columns {
     display: grid;
-    grid-template-columns: repeat(2, 1fr);
+    grid-template-columns: repeat(3, 1fr);
     gap: var(--vault-space-4);
     margin-bottom: var(--vault-space-8);
 }
 
-/* [Figma] Panel (CRM), node 15517:14878 — flat container, silver-light border,
-   silver-lightest bg (accent variant). The colored __header is a RetroVault
-   addition; the Panel spec itself has no title slot. */
+@media (max-width: 1024px) {
+    .vault-columns { grid-template-columns: 1fr; }
+}
+
+/* Feedback column — uses the same white card treatment as .vault-card so
+   it visually matches the Action Items section below. (Figma's Panel spec
+   is flat / edge-to-edge for sidebars; in a standalone grid we lift it
+   onto a white surface instead.) */
 .vault-column {
-    background: var(--vault-surface-panel);
+    background: var(--vault-surface);
     border-radius: var(--vault-radius-lg);
     border: 1px solid var(--vault-border-subtle);
+    box-shadow: var(--vault-shadow);
     min-height: 300px;
+    overflow: hidden;
 }
 
 .vault-column__header {
@@ -459,6 +466,39 @@
     align-items: center;
     gap: var(--vault-space-2);
 }
+
+/* Action Item card — same visual shape as feedback card, different content */
+.vault-action-card {
+    background: var(--vault-surface);
+    border: 1px solid var(--vault-border-subtle);
+    border-radius: var(--vault-radius);
+    padding: var(--vault-space-3);
+    display: flex;
+    flex-direction: column;
+    gap: var(--vault-space-2);
+}
+
+.vault-action-card__title {
+    font-size: var(--vault-font-size-md);
+    font-weight: var(--vault-font-weight-medium);
+    color: var(--vault-text-primary);
+    line-height: 1.4;
+    word-break: break-word;
+}
+
+.vault-action-card__meta {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: var(--vault-space-1);
+    font-size: var(--vault-font-size-sm);
+    color: var(--vault-text-secondary);
+}
+
+.vault-action-card__owner { font-weight: var(--vault-font-weight-medium); }
+
+.vault-action-card__due { color: var(--vault-text-secondary); }
 
 /* Vote button */
 .vault-vote-btn {

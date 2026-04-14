@@ -303,49 +303,37 @@ export default function BoardView({ boardId, navigate, showToast }) {
                         </div>
                     );
                 })}
-            </div>
 
-            <div className="vault-card vault-mt-24">
-                <div className="vault-card__header">
-                    <span className="vault-card__title">Action Items ({actions.length})</span>
-                    {currentUserId && (
-                        <button className="vault-btn vault-btn--small vault-btn--primary" onClick={() => setAiModal(true)}>
-                            + Add
-                        </button>
-                    )}
+                {/* Action Items as the 3rd column */}
+                <div className="vault-column">
+                    <div className="vault-column__header vault-column__header--blue">
+                        <span>Action Items</span>
+                        <span className="vault-column__count">{actions.length}</span>
+                    </div>
+                    <div className="vault-column__body">
+                        {currentUserId && (
+                            <button
+                                className="vault-btn vault-btn--small vault-btn--secondary"
+                                style={{ width: '100%', marginBottom: 4 }}
+                                onClick={() => setAiModal(true)}
+                            >
+                                + Add
+                            </button>
+                        )}
+                        {actions.length === 0 ? (
+                            <div className="vault-empty vault-text-small" style={{ padding: 16 }}>No action items yet</div>
+                        ) : (
+                            actions.map(a => (
+                                <ActionCard
+                                    key={a.id}
+                                    item={a}
+                                    ownerName={userName(a, 'owner')}
+                                    onStatusChange={(s) => updateActionStatus(a.id, s)}
+                                />
+                            ))
+                        )}
+                    </div>
                 </div>
-                {actions.length === 0 ? (
-                    <div className="vault-card__body"><EmptyState message="No action items yet." /></div>
-                ) : (
-                    <table className="vault-table">
-                        <thead>
-                            <tr>
-                                <th>Title</th><th>Owner</th><th>Status</th><th>Due Date</th><th>Completed</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {actions.map(a => (
-                                <tr key={a.id}>
-                                    <td>{a.name__v}</td>
-                                    <td>{userName(a, 'owner')}</td>
-                                    <td>
-                                        <select
-                                            className="vault-status-select"
-                                            value={a.status__c}
-                                            onChange={(e) => updateActionStatus(a.id, e.target.value)}
-                                        >
-                                            <option value="open__c">Open</option>
-                                            <option value="in_progress__c">In Progress</option>
-                                            <option value="done__c">Done</option>
-                                        </select>
-                                    </td>
-                                    <td>{formatDate(a.due_date__c)}</td>
-                                    <td>{a.completed_at__c ? formatDateTime(a.completed_at__c) : ''}</td>
-                                </tr>
-                            ))}
-                        </tbody>
-                    </table>
-                )}
             </div>
 
             {/* Feedback Modal */}
@@ -433,6 +421,34 @@ export default function BoardView({ boardId, navigate, showToast }) {
                 </Modal>
             )}
         </>
+    );
+}
+
+function ActionCard({ item, ownerName, onStatusChange }) {
+    return (
+        <div className="vault-action-card">
+            <div className="vault-action-card__title">{item.name__v}</div>
+            <div className="vault-action-card__meta">
+                <span className="vault-action-card__owner">{ownerName}</span>
+                {item.due_date__c && (
+                    <span className="vault-action-card__due">Due {formatDate(item.due_date__c)}</span>
+                )}
+            </div>
+            <select
+                className="vault-status-select"
+                value={item.status__c}
+                onChange={(e) => onStatusChange(e.target.value)}
+            >
+                <option value="open__c">Open</option>
+                <option value="in_progress__c">In Progress</option>
+                <option value="done__c">Done</option>
+            </select>
+            {item.completed_at__c && (
+                <div className="vault-text-small vault-text-muted">
+                    Completed {formatDateTime(item.completed_at__c)}
+                </div>
+            )}
+        </div>
     );
 }
 
