@@ -1,58 +1,75 @@
-/*
- * RetroVault - Retro Board Object
- * Depends on: 00_picklists.mdl, 01_team.mdl
- * User references use built-in user__sys object.
- */
-
 RECREATE Object retro_board__c (
     label('Retro Board'),
     label_plural('Retro Boards'),
     active(true),
-    description('A retrospective session board'),
+    in_menu(true),
+    audit(false),
+    description('A retrospective session board')
+);
 
-    Objectfield name__v (
-        label('Board Name'),
-        type('String'),
-        active(true),
-        required(true)
-    ),
-
-    Objectfield facilitator__c (
+ALTER Object retro_board__c (
+    add Field facilitator__c (
         label('Facilitator'),
         type('ObjectReference'),
+        object('user__sys'),
+        relationship_type('reference'),
         active(true),
         required(true),
-        object('user__sys'),
-        relationship_type('reference')
-    ),
+        list_column(false)
+    )
+);
 
-    Objectfield team__c (
+ALTER Object retro_board__c (
+    add Field team__c (
         label('Team'),
         type('ObjectReference'),
+        object('team__c'),
+        relationship_type('reference'),
         active(true),
         required(true),
-        object('team__c'),
-        relationship_type('reference')
-    ),
+        list_column(false)
+    )
+);
 
-    Objectfield release_tag__c (
+ALTER Object retro_board__c (
+    add Field release_tag__c (
         label('Release Tag'),
         type('String'),
-        active(true)
-    ),
+        max_length(100),
+        active(true),
+        required(false),
+        list_column(false)
+    )
+);
 
-    Objectfield board_date__c (
+ALTER Object retro_board__c (
+    add Field board_date__c (
         label('Board Date'),
         type('Date'),
         active(true),
-        required(true)
-    ),
+        required(true),
+        list_column(false)
+    )
+);
 
-    Objectfield status__c (
+ALTER Object retro_board__c (
+    add Field status__c (
         label('Status'),
         type('Picklist'),
+        picklist('Picklist.board_status__c'),
         active(true),
         required(true),
-        picklist('board_status__c')
+        list_column(false)
+    )
+);
+
+ALTER Object retro_board__c (
+    add Field features__c (
+        label('Features'),
+        type('String'),
+        max_length(1500),
+        active(true),
+        required(false),
+        list_column(false)
     )
 );

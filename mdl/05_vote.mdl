@@ -1,40 +1,32 @@
-/*
- * RetroVault - Vote Object
- * Depends on: 03_feedback_item.mdl
- * User references use built-in user__sys object.
- *
- * Uniqueness constraint (one vote per user per feedback item)
- * is enforced in application logic (PageController) by querying
- * before creating.
- */
-
 RECREATE Object vote__c (
     label('Vote'),
     label_plural('Votes'),
     active(true),
-    description('Upvote on a feedback item, one per user per item'),
+    in_menu(true),
+    audit(false),
+    description('Upvote on a feedback item, one per user per item')
+);
 
-    Objectfield name__v (
-        label('Vote ID'),
-        type('String'),
-        active(true)
-    ),
-
-    Objectfield feedback_item__c (
+ALTER Object vote__c (
+    add Field feedback_item__c (
         label('Feedback Item'),
         type('ObjectReference'),
+        object('feedback_item__c'),
+        relationship_type('reference'),
         active(true),
         required(true),
-        object('feedback_item__c'),
-        relationship_type('reference')
-    ),
+        list_column(false)
+    )
+);
 
-    Objectfield voter__c (
+ALTER Object vote__c (
+    add Field voter__c (
         label('Voter'),
         type('ObjectReference'),
+        object('user__sys'),
+        relationship_type('reference'),
         active(true),
         required(true),
-        object('user__sys'),
-        relationship_type('reference')
+        list_column(false)
     )
 );

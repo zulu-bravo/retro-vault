@@ -1,64 +1,88 @@
-/*
- * RetroVault - Feedback Item Object
- * Depends on: 00_picklists.mdl, 02_retro_board.mdl
- * User references use built-in user__sys object.
- */
-
 RECREATE Object feedback_item__c (
     label('Feedback Item'),
     label_plural('Feedback Items'),
     active(true),
-    description('Individual feedback entry on a retro board'),
+    in_menu(true),
+    audit(false),
+    description('Individual feedback entry on a retro board')
+);
 
-    Objectfield name__v (
-        label('Feedback Summary'),
-        type('String'),
-        active(true)
-    ),
-
-    Objectfield retro_board__c (
+ALTER Object feedback_item__c (
+    add Field retro_board__c (
         label('Retro Board'),
         type('ObjectReference'),
+        object('retro_board__c'),
+        relationship_type('reference'),
         active(true),
         required(true),
-        object('retro_board__c'),
-        relationship_type('reference')
-    ),
+        list_column(false)
+    )
+);
 
-    Objectfield author__c (
+ALTER Object feedback_item__c (
+    add Field author__c (
         label('Author'),
         type('ObjectReference'),
+        object('user__sys'),
+        relationship_type('reference'),
         active(true),
         required(true),
-        object('user__sys'),
-        relationship_type('reference')
-    ),
+        list_column(false)
+    )
+);
 
-    Objectfield category__c (
+ALTER Object feedback_item__c (
+    add Field category__c (
         label('Category'),
         type('Picklist'),
+        picklist('Picklist.feedback_category__c'),
         active(true),
         required(true),
-        picklist('feedback_category__c')
-    ),
+        list_column(false)
+    )
+);
 
-    Objectfield content__c (
+ALTER Object feedback_item__c (
+    add Field content__c (
         label('Content'),
         type('String'),
+        max_length(1500),
         active(true),
-        required(true)
-    ),
+        required(true),
+        list_column(false)
+    )
+);
 
-    Objectfield ai_theme__c (
+ALTER Object feedback_item__c (
+    add Field theme__c (
         label('Theme'),
         type('Picklist'),
+        picklist('Picklist.ai_theme__c'),
         active(true),
-        picklist('ai_theme__c')
-    ),
+        required(false),
+        list_column(false)
+    )
+);
 
-    Objectfield vote_count__c (
+ALTER Object feedback_item__c (
+    add Field feature__c (
+        label('Feature'),
+        type('String'),
+        max_length(200),
+        active(true),
+        required(false),
+        list_column(false)
+    )
+);
+
+ALTER Object feedback_item__c (
+    add Field vote_count__c (
         label('Vote Count'),
         type('Number'),
-        active(true)
+        min_value(0),
+        max_value(9999),
+        active(true),
+        required(false),
+        list_column(false)
     )
 );

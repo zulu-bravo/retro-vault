@@ -1,8 +1,3 @@
-/*
- * RetroVault - Picklist Definitions
- * Deploy this file FIRST before any object MDL files.
- */
-
 RECREATE Picklist feedback_category__c (
     label('Feedback Category'),
     active(true),

@@ -98,10 +98,9 @@ function computeSentiment(feedback, boardTeam, teamNames) {
     const data = {};
     feedback.forEach(fi => {
         const teamId = boardTeam[fi.retro_board__c] || 'unknown';
-        if (!data[teamId]) data[teamId] = { went_well: 0, didnt_go_well: 0, ideas: 0, boards: new Set() };
+        if (!data[teamId]) data[teamId] = { went_well: 0, didnt_go_well: 0, boards: new Set() };
         if (fi.category__c === 'went_well__c') data[teamId].went_well++;
         else if (fi.category__c === 'didnt_go_well__c') data[teamId].didnt_go_well++;
-        else if (fi.category__c === 'ideas__c') data[teamId].ideas++;
         data[teamId].boards.add(fi.retro_board__c);
     });
 
@@ -209,7 +208,7 @@ function SentimentPanel({ rows }) {
                 <table className="vault-table">
                     <thead>
                         <tr>
-                            <th>Team</th><th>Went Well</th><th>Didn't Go Well</th><th>Ideas</th>
+                            <th>Team</th><th>Went Well</th><th>To Improve</th>
                             <th>Ratio</th><th>Positive %</th><th>Boards</th>
                         </tr>
                     </thead>
@@ -223,7 +222,6 @@ function SentimentPanel({ rows }) {
                                     <td className="vault-text-bold">{r.teamName}</td>
                                     <td>{r.went_well}</td>
                                     <td>{r.didnt_go_well}</td>
-                                    <td>{r.ideas}</td>
                                     <td>
                                         <div className="vault-bar-track" style={{ height: 16, width: 120, display: 'inline-flex' }}>
                                             <div className="vault-bar-fill vault-bar-fill--green" style={{ width: greenPct + '%', minWidth: 0, padding: 0 }}></div>

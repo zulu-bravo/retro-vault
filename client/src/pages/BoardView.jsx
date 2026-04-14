@@ -4,7 +4,7 @@ import {
     fetchFeedbackForBoard,
     fetchActionsForBoard,
     fetchVotesForUser,
-    fetchUsers,
+    userName,
     create,
     update,
     deleteRecord,
@@ -17,8 +17,7 @@ import { formatDate, formatDateTime } from '../utils/format';
 
 const CATEGORIES = [
     { key: 'went_well__c', label: 'Went Well', color: 'green' },
-    { key: 'didnt_go_well__c', label: "Didn't Go Well", color: 'red' },
-    { key: 'ideas__c', label: 'Ideas', color: 'blue' }
+    { key: 'didnt_go_well__c', label: 'To Improve', color: 'red' }
 ];
 
 const THEMES = [
@@ -39,12 +38,12 @@ export default function BoardView({ boardId, navigate, showToast }) {
     const [board, setBoard] = useState(null);
     const [feedback, setFeedback] = useState([]);
     const [actions, setActions] = useState([]);
-    const [userMap, setUserMap] = useState({});
     const [userVotes, setUserVotes] = useState({}); // feedbackItemId -> voteRecordId
 
-    const [fbModal, setFbModal] = useState(null); // { category }
+    const [fbModal, setFbModal] = useState(null); // { category } or { id, category }
     const [fbContent, setFbContent] = useState('');
     const [fbTheme, setFbTheme] = useState('');
+    const [fbFeature, setFbFeature] = useState('');
 
     const [aiModal, setAiModal] = useState(false);
     const [aiTitle, setAiTitle] = useState('');
@@ -52,20 +51,15 @@ export default function BoardView({ boardId, navigate, showToast }) {
 
     const loadData = useCallback(async () => {
         try {
-            const [b, f, a, v, users] = await Promise.all([
+            const [b, f, a, v] = await Promise.all([
                 fetchBoard(boardId),
                 fetchFeedbackForBoard(boardId),
                 fetchActionsForBoard(boardId),
-                currentUserId ? fetchVotesForUser(currentUserId) : Promise.resolve([]),
-                fetchUsers()
+                currentUserId ? fetchVotesForUser(currentUserId) : Promise.resolve([])
             ]);
             setBoard(b);
             setFeedback(f);
             setActions(a);
-
-            const map = {};
-            users.forEach(u => { map[u.id] = u.name__v; });
-            setUserMap(map);
 
             // Filter votes to only those for this board's feedback items
             const boardFeedbackIds = new Set(f.map(fi => fi.id));
@@ -137,32 +131,60 @@ export default function BoardView({ boardId, navigate, showToast }) {
         }
     }
 
-    /* ---------- Add Feedback ---------- */
+    /* ---------- Add / Edit Feedback ---------- */
+
+    function openEditFeedback(item) {
+        setFbModal({ id: item.id, category: item.category__c });
+        setFbContent(item.content__c || '');
+        setFbTheme(item.theme__c || '');
+        setFbFeature(item.feature__c || '');
+    }
+
+    function resetFbModal() {
+        setFbModal(null);
+        setFbContent('');
+        setFbTheme('');
+        setFbFeature('');
+    }
 
     async function submitFeedback() {
         if (!fbContent.trim()) {
             showToast('Please enter feedback content.', 'error');
             return;
         }
+        const isEdit = !!fbModal.id;
         try {
-            const fields = {
-                name__v: fbContent.substring(0, 80),
-                retro_board__c: boardId,
-                author__c: currentUserId,
-                category__c: fbModal.category,
-                content__c: fbContent,
-                vote_count__c: 0
-            };
-            if (fbTheme) fields.theme__c = fbTheme;
+            if (isEdit) {
+                const updates = {
+                    name__v: fbContent.substring(0, 80),
+                    content__c: fbContent,
+                    theme__c: fbTheme || null,
+                    feature__c: fbFeature || null
+                };
+                await update('feedback_item__c', fbModal.id, updates);
+                setFeedback(prev => prev.map(fi =>
+                    fi.id === fbModal.id ? { ...fi, ...updates } : fi
+                ));
+                showToast('Feedback updated!', 'success');
+            } else {
+                const fields = {
+                    name__v: fbContent.substring(0, 80),
+                    retro_board__c: boardId,
+                    author__c: currentUserId,
+                    category__c: fbModal.category,
+                    content__c: fbContent,
+                    vote_count__c: 0
+                };
+                if (fbTheme) fields.theme__c = fbTheme;
+                if (fbFeature) fields.feature__c = fbFeature;
 
-            const newId = await create('feedback_item__c', fields);
-            setFeedback(prev => [...prev, { id: newId, ...fields }]);
-            setFbModal(null);
-            setFbContent('');
-            setFbTheme('');
-            showToast('Feedback added!', 'success');
+                const newId = await create('feedback_item__c', fields);
+                setFeedback(prev => [...prev, { id: newId, ...fields }]);
+                showToast('Feedback added!', 'success');
+            }
+            resetFbModal();
         } catch (err) {
-            showToast('Failed to add feedback: ' + err.message, 'error');
+            showToast(`Failed to ${isEdit ? 'update' : 'add'} feedback: ${err.message}`, 'error');
         }
     }
 
@@ -222,12 +244,17 @@ export default function BoardView({ boardId, navigate, showToast }) {
                     <p className="vault-page-header__subtitle">
                         {formatDate(board.board_date__c)}
                         {board.release_tag__c && ` · ${board.release_tag__c}`}
-                        {` · Facilitator: ${userMap[board.facilitator__c] || 'Unknown'}`}
+                        {` · Facilitator: ${userName(board, 'facilitator')}`}
                     </p>
                 </div>
-                <button className="vault-btn vault-btn--secondary" onClick={() => navigate('dashboard')}>
-                    ← Back
-                </button>
+                <div className="vault-flex vault-gap-8">
+                    <button className="vault-btn vault-btn--secondary" onClick={() => navigate('create-board', { boardId })}>
+                        Edit Board
+                    </button>
+                    <button className="vault-btn vault-btn--secondary" onClick={() => navigate('dashboard')}>
+                        ← Back
+                    </button>
+                </div>
             </div>
 
             <div className="vault-columns">
@@ -247,7 +274,12 @@ export default function BoardView({ boardId, navigate, showToast }) {
                                     <button
                                         className="vault-btn vault-btn--small vault-btn--secondary"
                                         style={{ width: '100%', marginBottom: 4 }}
-                                        onClick={() => { setFbModal({ category: cat.key }); setFbContent(''); setFbTheme(''); }}
+                                        onClick={() => {
+                                            setFbModal({ category: cat.key });
+                                            setFbContent('');
+                                            setFbTheme('');
+                                            setFbFeature('');
+                                        }}
                                     >
                                         + Add
                                     </button>
@@ -259,10 +291,11 @@ export default function BoardView({ boardId, navigate, showToast }) {
                                         <FeedbackCard
                                             key={item.id}
                                             item={item}
-                                            authorName={userMap[item.author__c] || 'Unknown'}
+                                            authorName={userName(item, 'author')}
                                             isVoted={!!userVotes[item.id]}
                                             onVote={() => toggleVote(item.id)}
                                             canVote={!!currentUserId}
+                                            onEdit={() => openEditFeedback(item)}
                                         />
                                     ))
                                 )}
@@ -294,7 +327,7 @@ export default function BoardView({ boardId, navigate, showToast }) {
                             {actions.map(a => (
                                 <tr key={a.id}>
                                     <td>{a.name__v}</td>
-                                    <td>{userMap[a.owner__c] || 'Unassigned'}</td>
+                                    <td>{userName(a, 'owner')}</td>
                                     <td>
                                         <select
                                             className="vault-status-select"
@@ -316,36 +349,57 @@ export default function BoardView({ boardId, navigate, showToast }) {
             </div>
 
             {/* Feedback Modal */}
-            {fbModal && (
-                <Modal
-                    title="Add Feedback"
-                    confirmLabel="Add Feedback"
-                    onClose={() => setFbModal(null)}
-                    onConfirm={submitFeedback}
-                >
-                    <div className="vault-form">
-                        <div className="vault-form-group">
-                            <label className="vault-label">Feedback *</label>
-                            <textarea
-                                className="vault-textarea"
-                                placeholder="Share your feedback..."
-                                value={fbContent}
-                                onChange={(e) => setFbContent(e.target.value)}
-                                rows={3}
-                            />
+            {fbModal && (() => {
+                const boardFeatures = (board?.features__c || '')
+                    .split('\n')
+                    .map(s => s.trim())
+                    .filter(Boolean);
+                return (
+                    <Modal
+                        title={fbModal.id ? 'Edit Feedback' : 'Add Feedback'}
+                        confirmLabel={fbModal.id ? 'Save Changes' : 'Add Feedback'}
+                        onClose={resetFbModal}
+                        onConfirm={submitFeedback}
+                    >
+                        <div className="vault-form">
+                            <div className="vault-form-group">
+                                <label className="vault-label">Feedback *</label>
+                                <textarea
+                                    className="vault-textarea"
+                                    placeholder="Share your feedback..."
+                                    value={fbContent}
+                                    onChange={(e) => setFbContent(e.target.value)}
+                                    rows={3}
+                                />
+                            </div>
+                            <div className="vault-form-group">
+                                <label className="vault-label">Feature</label>
+                                {boardFeatures.length > 0 ? (
+                                    <select className="vault-select" value={fbFeature} onChange={(e) => setFbFeature(e.target.value)}>
+                                        <option value="">None</option>
+                                        {boardFeatures.map(f => (
+                                            <option key={f} value={f}>{f}</option>
+                                        ))}
+                                    </select>
+                                ) : (
+                                    <div className="vault-text-small vault-text-muted">
+                                        No features defined for this board. Edit the board to add some.
+                                    </div>
+                                )}
+                            </div>
+                            <div className="vault-form-group">
+                                <label className="vault-label">Theme</label>
+                                <select className="vault-select" value={fbTheme} onChange={(e) => setFbTheme(e.target.value)}>
+                                    <option value="">None</option>
+                                    {THEMES.map(t => (
+                                        <option key={t.name} value={t.name}>{t.label}</option>
+                                    ))}
+                                </select>
+                            </div>
                         </div>
-                        <div className="vault-form-group">
-                            <label className="vault-label">Theme</label>
-                            <select className="vault-select" value={fbTheme} onChange={(e) => setFbTheme(e.target.value)}>
-                                <option value="">None</option>
-                                {THEMES.map(t => (
-                                    <option key={t.name} value={t.name}>{t.label}</option>
-                                ))}
-                            </select>
-                        </div>
-                    </div>
-                </Modal>
-            )}
+                    </Modal>
+                );
+            })()}
 
             {/* Action Item Modal */}
             {aiModal && (
@@ -382,11 +436,18 @@ export default function BoardView({ boardId, navigate, showToast }) {
     );
 }
 
-function FeedbackCard({ item, authorName, isVoted, onVote, canVote }) {
+function FeedbackCard({ item, authorName, isVoted, onVote, canVote, onEdit }) {
     const voteCount = parseInt(item.vote_count__c || 0, 10);
     return (
-        <div className="vault-feedback-card">
+        <div
+            className="vault-feedback-card vault-feedback-card--clickable"
+            onClick={onEdit}
+            title="Click to edit"
+        >
             <div className="vault-feedback-card__content">{item.content__c}</div>
+            {item.feature__c && (
+                <div className="vault-feedback-card__feature">{item.feature__c}</div>
+            )}
             <div className="vault-feedback-card__footer">
                 <span className="vault-feedback-card__author">{authorName}</span>
                 <div className="vault-feedback-card__actions">
@@ -394,7 +455,7 @@ function FeedbackCard({ item, authorName, isVoted, onVote, canVote }) {
                     {canVote ? (
                         <button
                             className={'vault-vote-btn' + (isVoted ? ' vault-vote-btn--voted' : '')}
-                            onClick={onVote}
+                            onClick={(e) => { e.stopPropagation(); onVote(); }}
                         >
                             ▲ {voteCount}
                         </button>

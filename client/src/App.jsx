@@ -33,7 +33,7 @@ export default function App() {
             content = <Insights navigate={navigate} showToast={showToast} />;
             break;
         case 'create-board':
-            content = <CreateBoard navigate={navigate} showToast={showToast} />;
+            content = <CreateBoard boardId={view.boardId} navigate={navigate} showToast={showToast} />;
             break;
         case 'seed':
             content = <SeedData navigate={navigate} showToast={showToast} />;

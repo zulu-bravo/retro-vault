@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { create, update, query, fetchUsers } from '../api/vault';
+import { create, update, query, getCurrentUserId } from '../api/vault';
 
 export default function SeedData({ navigate, showToast }) {
     const [running, setRunning] = useState(false);
@@ -13,18 +13,15 @@ export default function SeedData({ navigate, showToast }) {
         setRunning(true);
         setLog([]);
         try {
-            append('Fetching Vault users...', 'info');
-            const users = await fetchUsers();
-            if (users.length === 0) {
-                append('ERROR: No users found in user__sys. Cannot proceed.', 'error');
+            // The SDK blocks direct user__sys queries on this Vault, so all
+            // seeded authors/facilitators/owners are the current user.
+            const currentUserId = getCurrentUserId();
+            if (!currentUserId) {
+                append('ERROR: No current user ID. Cannot proceed.', 'error');
                 return;
             }
-            append(`Found ${users.length} users`, 'success');
-
-            // Repeat users if fewer than 9
-            let u = users.slice();
-            while (u.length < 9) u = u.concat(u);
-            u = u.slice(0, 9);
+            const u = Array(9).fill({ id: currentUserId });
+            append(`Seeding as current user ${currentUserId}`, 'success');
 
             append('\nCreating teams...', 'info');
             const teamData = [
@@ -66,26 +63,20 @@ export default function SeedData({ navigate, showToast }) {
                 { board: 0, author: 2, cat: 'went_well__c', theme: 'process__c', content: 'Daily standups were focused and efficient', votes: 3 },
                 { board: 0, author: 0, cat: 'didnt_go_well__c', theme: 'tooling__c', content: 'Flaky integration tests blocked deployments 3 times', votes: 7 },
                 { board: 0, author: 1, cat: 'didnt_go_well__c', theme: 'scope__c', content: 'Mid-sprint scope changes derailed our estimates', votes: 4 },
-                { board: 0, author: 2, cat: 'ideas__c', theme: 'tooling__c', content: 'Invest in test quarantine system for flaky tests', votes: 6 },
-                { board: 0, author: 0, cat: 'ideas__c', theme: 'process__c', content: 'Add a scope freeze after sprint planning', votes: 2 },
                 { board: 1, author: 1, cat: 'went_well__c', theme: 'communication__c', content: 'Cross-team sync meetings improved alignment', votes: 4 },
                 { board: 1, author: 2, cat: 'went_well__c', theme: 'quality__c', content: 'Zero production incidents this sprint', votes: 5 },
                 { board: 1, author: 0, cat: 'went_well__c', theme: 'morale__c', content: 'Team lunch boosted morale significantly', votes: 3 },
                 { board: 1, author: 1, cat: 'didnt_go_well__c', theme: 'tooling__c', content: 'Build times increased after monorepo migration', votes: 6 },
                 { board: 1, author: 2, cat: 'didnt_go_well__c', theme: 'staffing__c', content: 'Lost a senior engineer mid-sprint to another project', votes: 3 },
-                { board: 1, author: 0, cat: 'ideas__c', theme: 'tooling__c', content: 'Set up build caching to reduce compile times', votes: 4 },
                 { board: 2, author: 4, cat: 'went_well__c', theme: 'process__c', content: 'New code review checklist caught bugs early', votes: 4 },
                 { board: 2, author: 5, cat: 'went_well__c', theme: 'communication__c', content: 'Architecture decision records improved knowledge sharing', votes: 3 },
                 { board: 2, author: 3, cat: 'didnt_go_well__c', theme: 'scope__c', content: 'Feature requirements changed after development started', votes: 5 },
                 { board: 2, author: 4, cat: 'didnt_go_well__c', theme: 'tooling__c', content: 'Staging environment was down for 2 days', votes: 4 },
                 { board: 2, author: 5, cat: 'didnt_go_well__c', theme: 'process__c', content: 'PR reviews taking 3+ days on average', votes: 3 },
-                { board: 2, author: 3, cat: 'ideas__c', theme: 'process__c', content: 'Implement PR size limits and auto-assign reviewers', votes: 5 },
                 { board: 3, author: 7, cat: 'went_well__c', theme: 'communication__c', content: 'Incident response communication was fast and clear', votes: 2 },
                 { board: 3, author: 8, cat: 'went_well__c', theme: 'quality__c', content: 'Root cause identified within 30 minutes', votes: 3 },
                 { board: 3, author: 6, cat: 'didnt_go_well__c', theme: 'tooling__c', content: 'Alert fatigue delayed initial response by 15 minutes', votes: 4 },
-                { board: 3, author: 7, cat: 'didnt_go_well__c', theme: 'process__c', content: 'No runbook existed for this failure scenario', votes: 3 },
-                { board: 3, author: 8, cat: 'ideas__c', theme: 'tooling__c', content: 'Reduce noise in alerting by tuning thresholds', votes: 5 },
-                { board: 3, author: 6, cat: 'ideas__c', theme: 'process__c', content: 'Create runbooks for all critical service failures', votes: 4 }
+                { board: 3, author: 7, cat: 'didnt_go_well__c', theme: 'process__c', content: 'No runbook existed for this failure scenario', votes: 3 }
             ];
 
             const feedbackIds = [];

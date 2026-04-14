@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { fetchTeams, fetchBoards, fetchUsers } from '../api/vault';
+import { fetchTeams, fetchBoards, userName } from '../api/vault';
 import Spinner, { EmptyState } from '../components/Spinner';
 import { StatusBadge } from '../components/Badge';
 import { formatDate } from '../utils/format';
@@ -8,21 +8,13 @@ export default function Dashboard({ navigate, showToast }) {
     const [loading, setLoading] = useState(true);
     const [teams, setTeams] = useState([]);
     const [boards, setBoards] = useState([]);
-    const [userMap, setUserMap] = useState({});
 
     useEffect(() => {
         (async () => {
             try {
-                const [t, b, users] = await Promise.all([
-                    fetchTeams(),
-                    fetchBoards(),
-                    fetchUsers()
-                ]);
+                const [t, b] = await Promise.all([fetchTeams(), fetchBoards()]);
                 setTeams(t);
                 setBoards(b);
-                const map = {};
-                users.forEach(u => { map[u.id] = u.name__v; });
-                setUserMap(map);
             } catch (err) {
                 showToast('Failed to load data: ' + err.message, 'error');
                 console.error(err);
@@ -91,7 +83,7 @@ export default function Dashboard({ navigate, showToast }) {
                                                 </div>
                                                 <div className="vault-board-card__meta">
                                                     <span className="vault-board-card__meta-item">
-                                                        Facilitator: {userMap[board.facilitator__c] || 'Unknown'}
+                                                        Facilitator: {userName(board, 'facilitator')}
                                                     </span>
                                                 </div>
                                             </div>

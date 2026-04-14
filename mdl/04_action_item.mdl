@@ -1,56 +1,63 @@
-/*
- * RetroVault - Action Item Object
- * Depends on: 00_picklists.mdl, 02_retro_board.mdl
- * User references use built-in user__sys object.
- */
-
 RECREATE Object action_item__c (
     label('Action Item'),
     label_plural('Action Items'),
     active(true),
-    description('Action item created from a retrospective'),
+    in_menu(true),
+    audit(false),
+    description('Action item created from a retrospective')
+);
 
-    Objectfield name__v (
-        label('Title'),
-        type('String'),
-        active(true),
-        required(true)
-    ),
-
-    Objectfield retro_board__c (
+ALTER Object action_item__c (
+    add Field retro_board__c (
         label('Retro Board'),
         type('ObjectReference'),
+        object('retro_board__c'),
+        relationship_type('reference'),
         active(true),
         required(true),
-        object('retro_board__c'),
-        relationship_type('reference')
-    ),
+        list_column(false)
+    )
+);
 
-    Objectfield owner__c (
+ALTER Object action_item__c (
+    add Field owner__c (
         label('Owner'),
         type('ObjectReference'),
-        active(true),
         object('user__sys'),
-        relationship_type('reference')
-    ),
+        relationship_type('reference'),
+        active(true),
+        required(false),
+        list_column(false)
+    )
+);
 
-    Objectfield status__c (
+ALTER Object action_item__c (
+    add Field status__c (
         label('Status'),
         type('Picklist'),
+        picklist('Picklist.action_status__c'),
         active(true),
         required(true),
-        picklist('action_status__c')
-    ),
+        list_column(false)
+    )
+);
 
-    Objectfield due_date__c (
+ALTER Object action_item__c (
+    add Field due_date__c (
         label('Due Date'),
         type('Date'),
-        active(true)
-    ),
+        active(true),
+        required(false),
+        list_column(false)
+    )
+);
 
-    Objectfield completed_at__c (
+ALTER Object action_item__c (
+    add Field completed_at__c (
         label('Completed At'),
         type('DateTime'),
-        active(true)
+        active(true),
+        required(false),
+        list_column(false)
     )
 );

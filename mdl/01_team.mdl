@@ -1,18 +1,8 @@
-/*
- * RetroVault - Team Object
- * Depends on: 00_picklists.mdl
- */
-
 RECREATE Object team__c (
     label('Team'),
     label_plural('Teams'),
     active(true),
-    description('Represents a team participating in retrospectives'),
-
-    Objectfield name__v (
-        label('Team Name'),
-        type('String'),
-        active(true),
-        required(true)
-    )
+    in_menu(true),
+    audit(false),
+    description('Represents a team participating in retrospectives')
 );

@@ -101,17 +101,23 @@ export async function fetchTeams() {
     return query("SELECT id, name__v FROM team__c ORDER BY name__v ASC");
 }
 
+// Note: this Vault's SDK blocks direct queries on `user__sys`, so we pull
+// user names via dotted relationship syntax (facilitator__cr.name__v etc).
+// The client reads the joined value from the row via userName(row, prefix).
+
 export async function fetchBoards() {
     return query(
-        "SELECT id, name__v, facilitator__c, team__c, release_tag__c, " +
-        "board_date__c, status__c FROM retro_board__c ORDER BY board_date__c DESC"
+        "SELECT id, name__v, facilitator__c, facilitator__cr.name__v, " +
+        "team__c, release_tag__c, features__c, board_date__c, status__c " +
+        "FROM retro_board__c ORDER BY board_date__c DESC"
     );
 }
 
 export async function fetchBoard(boardId) {
     const records = await query(
-        "SELECT id, name__v, facilitator__c, team__c, release_tag__c, " +
-        "board_date__c, status__c FROM retro_board__c " +
+        "SELECT id, name__v, facilitator__c, facilitator__cr.name__v, " +
+        "team__c, release_tag__c, features__c, board_date__c, status__c " +
+        "FROM retro_board__c " +
         `WHERE id = '${escapeVql(boardId)}'`
     );
     return records[0] || null;
@@ -119,16 +125,17 @@ export async function fetchBoard(boardId) {
 
 export async function fetchFeedbackForBoard(boardId) {
     return query(
-        "SELECT id, name__v, retro_board__c, author__c, category__c, content__c, " +
-        "theme__c, vote_count__c FROM feedback_item__c " +
+        "SELECT id, name__v, retro_board__c, author__c, author__cr.name__v, " +
+        "category__c, content__c, theme__c, feature__c, vote_count__c " +
+        "FROM feedback_item__c " +
         `WHERE retro_board__c = '${escapeVql(boardId)}'`
     );
 }
 
 export async function fetchActionsForBoard(boardId) {
     return query(
-        "SELECT id, name__v, retro_board__c, owner__c, status__c, " +
-        "due_date__c, completed_at__c FROM action_item__c " +
+        "SELECT id, name__v, retro_board__c, owner__c, owner__cr.name__v, " +
+        "status__c, due_date__c, completed_at__c FROM action_item__c " +
         `WHERE retro_board__c = '${escapeVql(boardId)}'`
     );
 }
@@ -140,8 +147,9 @@ export async function fetchVotesForUser(userId) {
     );
 }
 
-export async function fetchUsers() {
-    return query("SELECT id, name__v FROM user__sys WHERE status__v = 'active__v' LIMIT 50");
+// Helper — read a joined user name off a row (returns 'Unknown' if absent).
+export function userName(row, prefix) {
+    return (row && row[prefix + '__cr.name__v']) || 'Unknown';
 }
 
 export async function fetchAllFeedback() {

@@ -1,12 +1,13 @@
 import React, { useEffect, useState } from 'react';
-import { fetchTeams, fetchUsers, create } from '../api/vault';
+import { fetchTeams, fetchBoard, create, update, getCurrentUserId } from '../api/vault';
 import Spinner from '../components/Spinner';
 import { toISODate } from '../utils/format';
 
-export default function CreateBoard({ navigate, showToast }) {
+export default function CreateBoard({ boardId, navigate, showToast }) {
+    const isEdit = !!boardId;
+    const currentUserId = getCurrentUserId();
     const [loading, setLoading] = useState(true);
     const [teams, setTeams] = useState([]);
-    const [users, setUsers] = useState([]);
     const [submitting, setSubmitting] = useState(false);
 
     const [name, setName] = useState('');
@@ -14,20 +15,35 @@ export default function CreateBoard({ navigate, showToast }) {
     const [facilitatorId, setFacilitatorId] = useState('');
     const [releaseTag, setReleaseTag] = useState('');
     const [boardDate, setBoardDate] = useState(toISODate(new Date()));
+    const [status, setStatus] = useState('active__c');
+    const [features, setFeatures] = useState('');
 
     useEffect(() => {
         (async () => {
             try {
-                const [t, u] = await Promise.all([fetchTeams(), fetchUsers()]);
+                const [t, existing] = await Promise.all([
+                    fetchTeams(),
+                    isEdit ? fetchBoard(boardId) : Promise.resolve(null)
+                ]);
                 setTeams(t);
-                setUsers(u);
+                if (existing) {
+                    setName(existing.name__v || '');
+                    setTeamId(existing.team__c || '');
+                    setFacilitatorId(existing.facilitator__c || currentUserId || '');
+                    setReleaseTag(existing.release_tag__c || '');
+                    setBoardDate(existing.board_date__c || toISODate(new Date()));
+                    setStatus(existing.status__c || 'active__c');
+                    setFeatures(existing.features__c || '');
+                } else {
+                    setFacilitatorId(currentUserId || '');
+                }
             } catch (err) {
                 showToast('Failed to load form data: ' + err.message, 'error');
             } finally {
                 setLoading(false);
             }
         })();
-    }, []);
+    }, [boardId]);
 
     async function handleSubmit(e) {
         e.preventDefault();
@@ -42,15 +58,22 @@ export default function CreateBoard({ navigate, showToast }) {
                 team__c: teamId,
                 facilitator__c: facilitatorId,
                 board_date__c: boardDate,
-                status__c: 'active__c'
+                status__c: status,
+                release_tag__c: releaseTag || null,
+                features__c: features || null
             };
-            if (releaseTag) fields.release_tag__c = releaseTag;
 
-            const newId = await create('retro_board__c', fields);
-            showToast('Board created!', 'success');
-            navigate('board', { boardId: newId });
+            if (isEdit) {
+                await update('retro_board__c', boardId, fields);
+                showToast('Board updated!', 'success');
+                navigate('board', { boardId });
+            } else {
+                const newId = await create('retro_board__c', fields);
+                showToast('Board created!', 'success');
+                navigate('board', { boardId: newId });
+            }
         } catch (err) {
-            showToast('Failed to create board: ' + err.message, 'error');
+            showToast(`Failed to ${isEdit ? 'update' : 'create'} board: ${err.message}`, 'error');
             setSubmitting(false);
         }
     }
@@ -61,8 +84,10 @@ export default function CreateBoard({ navigate, showToast }) {
         <div style={{ maxWidth: 640 }}>
             <div className="vault-page-header">
                 <div>
-                    <h1 className="vault-page-header__title">Create New Board</h1>
-                    <p className="vault-page-header__subtitle">Set up a new retrospective session</p>
+                    <h1 className="vault-page-header__title">{isEdit ? 'Edit Board' : 'Create New Board'}</h1>
+                    <p className="vault-page-header__subtitle">
+                        {isEdit ? 'Update this retrospective board' : 'Set up a new retrospective session'}
+                    </p>
                 </div>
             </div>
 
@@ -92,13 +117,14 @@ export default function CreateBoard({ navigate, showToast }) {
                         </div>
 
                         <div className="vault-form-group">
-                            <label className="vault-label">Facilitator *</label>
-                            <select className="vault-select" value={facilitatorId} onChange={(e) => setFacilitatorId(e.target.value)} required>
-                                <option value="">Select a facilitator</option>
-                                {users.map(u => (
-                                    <option key={u.id} value={u.id}>{u.name__v}</option>
-                                ))}
-                            </select>
+                            <label className="vault-label">Facilitator</label>
+                            <input
+                                className="vault-input"
+                                type="text"
+                                value={facilitatorId}
+                                disabled
+                                title="Auto-assigned to the current user. Change via the Vault admin UI if needed."
+                            />
                         </div>
 
                         <div className="vault-form-group">
@@ -123,12 +149,42 @@ export default function CreateBoard({ navigate, showToast }) {
                             />
                         </div>
 
+                        <div className="vault-form-group">
+                            <label className="vault-label">Features</label>
+                            <textarea
+                                className="vault-textarea"
+                                placeholder={'One feature per line, e.g.\nCheckout redesign\nSearch v2\nOnboarding flow'}
+                                value={features}
+                                onChange={(e) => setFeatures(e.target.value)}
+                                rows={6}
+                            />
+                            <div className="vault-text-small vault-text-muted">
+                                Feedback authors will pick from this list when adding items.
+                            </div>
+                        </div>
+
+                        {isEdit && (
+                            <div className="vault-form-group">
+                                <label className="vault-label">Status</label>
+                                <select className="vault-select" value={status} onChange={(e) => setStatus(e.target.value)}>
+                                    <option value="active__c">Active</option>
+                                    <option value="closed__c">Closed</option>
+                                </select>
+                            </div>
+                        )}
+
                         <div className="vault-flex-between vault-mt-16">
-                            <button type="button" className="vault-btn vault-btn--secondary" onClick={() => navigate('dashboard')}>
+                            <button
+                                type="button"
+                                className="vault-btn vault-btn--secondary"
+                                onClick={() => navigate(isEdit ? 'board' : 'dashboard', isEdit ? { boardId } : {})}
+                            >
                                 Cancel
                             </button>
                             <button type="submit" className="vault-btn vault-btn--primary" disabled={submitting}>
-                                {submitting ? 'Creating...' : 'Create Board'}
+                                {submitting
+                                    ? (isEdit ? 'Saving...' : 'Creating...')
+                                    : (isEdit ? 'Save Changes' : 'Create Board')}
                             </button>
                         </div>
                     </form>
