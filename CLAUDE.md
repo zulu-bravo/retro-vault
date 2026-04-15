@@ -18,13 +18,13 @@ Repo: `zulu-bravo/retro-vault` on GitHub.
 
 ## Deployment status
 
-The app is **deployed and working** on `zied.vaultdev.com`:
+The app is **deployed and working** on `align-veeva-productvaultcrm.veevavault.com`:
 
 - MDL data model created
 - Client distribution `Clientdistribution.retrovault__c` uploaded
 - `RetroVaultPageController` packaged and deployed via the Vault Java SDK Maven plugin
 - `Page.retrovault__c` and `Tab.retrovault__c` exist
-- Accessible at `https://zied.vaultdev.com/ui/#custom/page/retrovault`
+- Accessible at `https://align-veeva-productvaultcrm.veevavault.com/ui/#custom/page/retrovault`
 
 ## Architecture decisions (important context)
 

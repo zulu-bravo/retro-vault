@@ -249,7 +249,7 @@ export default function BoardView({ boardId, navigate, showToast }) {
                 </div>
                 <div className="vault-flex vault-gap-8">
                     <button className="vault-btn vault-btn--secondary" onClick={() => navigate('create-board', { boardId })}>
-                        Edit Board
+                        Settings
                     </button>
                     <button className="vault-btn vault-btn--secondary" onClick={() => navigate('dashboard')}>
                         ← Back
