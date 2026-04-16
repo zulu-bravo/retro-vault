@@ -39,6 +39,17 @@ function generateGroupId() {
     return 'g_' + Math.random().toString(36).slice(2, 10) + Date.now().toString(36).slice(-4);
 }
 
+// `group__c` doubles as the group ID and the display name. Newly created
+// groups get a generated `g_…` token so they don't collide; once the user
+// renames a group, that human-readable name becomes the ID.
+function isGeneratedGroupId(s) {
+    return typeof s === 'string' && /^g_[a-z0-9]+$/.test(s);
+}
+
+function groupDisplayName(groupId) {
+    return isGeneratedGroupId(groupId) ? 'Group' : groupId;
+}
+
 // Build the display order for a category: array of { type: 'card', item } | { type: 'group', groupId, items }.
 // Preserves the order of `items`; a group appears at the position of its first member.
 function buildColumnDisplay(items) {
@@ -382,6 +393,24 @@ export default function BoardView({ boardId, navigate, showToast }) {
             showToast('Grouping failed: ' + err.message, 'error');
         }
         closeContextMenu();
+    }
+
+    async function renameGroup(oldGroupId, newName) {
+        const trimmed = (newName || '').trim();
+        if (!trimmed || trimmed === oldGroupId) return;
+        const ids = feedback.filter(f => f.group__c === oldGroupId).map(f => f.id);
+        if (ids.length === 0) return;
+        try {
+            await Promise.all(ids.map(id =>
+                update('retro_feedback__c', id, { group__c: trimmed })
+            ));
+            setFeedback(prev => prev.map(f =>
+                ids.includes(f.id) ? { ...f, group__c: trimmed } : f
+            ));
+            showToast('Group renamed', 'success');
+        } catch (err) {
+            showToast('Rename failed: ' + err.message, 'error');
+        }
     }
 
     async function ungroupItems(groupId) {
@@ -741,6 +770,7 @@ export default function BoardView({ boardId, navigate, showToast }) {
                                                         onCardDragOver={onCardDragOver}
                                                         onGroupDragOver={onGroupDragOver}
                                                         onDragEnd={onDragEnd}
+                                                        onRenameGroup={renameGroup}
                                                     />
                                                     {dropTarget?.column === cat.key && dropTarget?.overId === g.groupId && dropTarget?.isGroup && dropTarget?.before === false && (
                                                         <div className="vault-drop-indicator" />
@@ -997,11 +1027,30 @@ function GroupCard({
     userVotes, currentUserId, selectedIds,
     onToggleVote, onCardClick, onCardContextMenu, onGroupContextMenu,
     onCardDragStart, onGroupDragStart,
-    onCardDragOver, onGroupDragOver, onDragEnd
+    onCardDragOver, onGroupDragOver, onDragEnd,
+    onRenameGroup
 }) {
     const isDropHere = dropTarget?.overId === groupId && dropTarget?.isGroup;
     const isJoinTarget = isDropHere && dropTarget?.intoGroup;
     const isDraggingThis = dragging?.type === 'group' && dragging?.groupId === groupId;
+
+    const [editing, setEditing] = useState(false);
+    const [draftName, setDraftName] = useState('');
+
+    function startRename(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        setDraftName(isGeneratedGroupId(groupId) ? '' : groupId);
+        setEditing(true);
+    }
+
+    function commitRename() {
+        const trimmed = draftName.trim();
+        setEditing(false);
+        if (trimmed && trimmed !== groupId) {
+            onRenameGroup(groupId, trimmed);
+        }
+    }
 
     return (
         <div
@@ -1015,13 +1064,43 @@ function GroupCard({
         >
             <div
                 className="vault-group-card__header"
-                draggable
-                onDragStart={onGroupDragStart}
+                draggable={!editing}
+                onDragStart={editing ? undefined : onGroupDragStart}
                 onDragEnd={onDragEnd}
-                title="Drag to move group · Right-click to ungroup"
+                title="Drag to move group · Right-click to ungroup · Double-click name to rename"
             >
                 <span className="vault-group-card__handle">⠿</span>
-                <span className="vault-group-card__label">Group · {items.length}</span>
+                {editing ? (
+                    <input
+                        className="vault-group-card__name-input"
+                        autoFocus
+                        value={draftName}
+                        maxLength={50}
+                        placeholder="Group name"
+                        onChange={(e) => setDraftName(e.target.value)}
+                        onBlur={commitRename}
+                        onKeyDown={(e) => {
+                            if (e.key === 'Enter') {
+                                e.preventDefault();
+                                commitRename();
+                            } else if (e.key === 'Escape') {
+                                e.preventDefault();
+                                setEditing(false);
+                            }
+                        }}
+                        onClick={(e) => e.stopPropagation()}
+                        onMouseDown={(e) => e.stopPropagation()}
+                        onDoubleClick={(e) => e.stopPropagation()}
+                    />
+                ) : (
+                    <span
+                        className="vault-group-card__label"
+                        onDoubleClick={startRename}
+                        title="Double-click to rename"
+                    >
+                        {groupDisplayName(groupId)} · {items.length}
+                    </span>
+                )}
             </div>
             <div className="vault-group-card__items">
                 {items.map(item => (
