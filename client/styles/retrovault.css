@@ -1012,6 +1012,18 @@
     overflow: visible;
 }
 
+.vault-chart__zone {
+    fill-opacity: 0.55;
+}
+
+.vault-chart__zone--positive {
+    fill: var(--vault-success-subtle);
+}
+
+.vault-chart__zone--negative {
+    fill: var(--vault-danger-subtle);
+}
+
 .vault-chart__gridline {
     stroke: var(--vault-border-subtle);
     stroke-width: 1;
