@@ -789,6 +789,12 @@
 
 .vault-table tr:hover td { background: var(--vault-surface-muted); }
 
+/* Clickable row — shows pointer cursor on the whole row. Row-level hover
+   is already covered by the generic rule above. */
+.vault-table__row--clickable {
+    cursor: pointer;
+}
+
 /* Forms */
 .vault-form { display: flex; flex-direction: column; gap: var(--vault-space-5); }
 
@@ -1169,6 +1175,31 @@
 .vault-bar-fill--green { background: var(--vault-success); }
 .vault-bar-fill--red { background: var(--vault-danger); }
 .vault-bar-fill--blue { background: var(--vault-primary); }
+
+/* Chart legend — color swatches + labels above a bar chart. */
+.vault-chart-legend {
+    display: flex;
+    gap: var(--vault-space-4);
+    margin-bottom: var(--vault-space-3);
+    font-size: var(--vault-font-size-sm);
+    color: var(--vault-text-secondary);
+}
+
+.vault-chart-legend__item {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--vault-space-1);
+}
+
+.vault-chart-swatch {
+    display: inline-block;
+    width: 12px;
+    height: 12px;
+    border-radius: 3px;
+}
+
+.vault-chart-swatch--green { background: var(--vault-success); }
+.vault-chart-swatch--red { background: var(--vault-danger); }
 
 .vault-bar-value {
     font-size: var(--vault-font-size-md);

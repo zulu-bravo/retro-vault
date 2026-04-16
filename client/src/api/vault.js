@@ -225,7 +225,7 @@ export function userName(row, prefix) {
 
 export async function fetchAllFeedback() {
     return query(
-        "SELECT id, retro_board__c, category__c, theme__c, vote_count__c, " +
+        "SELECT id, retro_board__c, category__c, theme__c, content__c, vote_count__c, " +
         "kudos_recipient__c, kudos_recipient__cr.name__v " +
         "FROM retro_feedback__c"
     );
@@ -233,6 +233,7 @@ export async function fetchAllFeedback() {
 
 export async function fetchAllActions() {
     return query(
-        "SELECT id, retro_board__c, status__c FROM retro_action__c"
+        "SELECT id, name__v, retro_board__c, status__c, due_date__c, completed_at__c, " +
+        "assignee__c, assignee__cr.name__v FROM retro_action__c"
     );
 }

@@ -8,6 +8,10 @@
         {
             "name": "retrovault_insights__c",
             "file": "dist/insights.js"
+        },
+        {
+            "name": "retrovault_actions__c",
+            "file": "dist/actions.js"
         }
     ],
     "stylesheets": [
