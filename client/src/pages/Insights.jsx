@@ -175,7 +175,7 @@ function CompletionPanel({ rows }) {
                     </div>
                     <table className="vault-table">
                         <thead>
-                            <tr><th>Team</th><th>Total</th><th>Done</th><th>In Progress</th><th>Open</th><th>Rate</th></tr>
+                            <tr><th>Team</th><th>Total</th><th>Done</th><th>In Progress</th><th>Not Started</th><th>Rate</th></tr>
                         </thead>
                         <tbody>
                             {rows.map(r => (

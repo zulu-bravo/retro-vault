@@ -329,6 +329,19 @@ export default function BoardView({ boardId, navigate, showToast }) {
         }
     }
 
+    async function updateActionTitle(actionId, newTitle) {
+        const trimmed = (newTitle || '').trim();
+        if (!trimmed) return;
+        try {
+            await update('retro_action__c', actionId, { name__v: trimmed });
+            setActions(prev => prev.map(a =>
+                a.id === actionId ? { ...a, name__v: trimmed } : a
+            ));
+        } catch (err) {
+            showToast('Failed to update title: ' + err.message, 'error');
+        }
+    }
+
     /* ---------- Multi-select + Context Menu ---------- */
 
     function handleCardClick(e, item) {
@@ -856,6 +869,7 @@ export default function BoardView({ boardId, navigate, showToast }) {
                                                 assigneeName={a['assignee__cr.name__v'] || null}
                                                 onStatusChange={(s) => updateActionStatus(a.id, s)}
                                                 onAssigneeChange={(id, name) => updateActionAssignee(a.id, id, name)}
+                                                onTitleChange={(t) => updateActionTitle(a.id, t)}
                                                 isDragging={dragging?.id === a.id}
                                                 onDragStart={() => onDragStart({ type: 'action', id: a.id })}
                                                 onDragOver={(e) => onCardDragOver(e, 'action', a.id)}
@@ -1165,26 +1179,71 @@ function ContextMenu({ x, y, children, onClose }) {
     );
 }
 
-function ActionCard({ item, ownerName, assigneeName, onStatusChange, onAssigneeChange, isDragging, onDragStart, onDragOver, onDragEnd }) {
+function ActionCard({ item, ownerName, assigneeName, onStatusChange, onAssigneeChange, onTitleChange, isDragging, onDragStart, onDragOver, onDragEnd }) {
     const [editingAssignee, setEditingAssignee] = useState(false);
+    const [editingTitle, setEditingTitle] = useState(false);
+    const [draftTitle, setDraftTitle] = useState('');
+
+    function startTitleEdit(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        setDraftTitle(item.name__v || '');
+        setEditingTitle(true);
+    }
+
+    function commitTitle() {
+        const trimmed = draftTitle.trim();
+        setEditingTitle(false);
+        if (trimmed && trimmed !== item.name__v) {
+            onTitleChange(trimmed);
+        }
+    }
 
     return (
         <div
-            className={'vault-action-card' + (isDragging ? ' vault-action-card--dragging' : '')}
-            draggable
-            onDragStart={onDragStart}
+            className={'vault-action-card vault-action-card--' + (item.status__c || 'open__c').replace('__c', '') + (isDragging ? ' vault-action-card--dragging' : '')}
+            draggable={!editingTitle}
+            onDragStart={editingTitle ? undefined : onDragStart}
             onDragOver={onDragOver}
             onDragEnd={onDragEnd}
         >
             <div className="vault-action-card__drag-handle">⠿</div>
-            <div className="vault-action-card__title">{item.name__v}</div>
+            {editingTitle ? (
+                <input
+                    className="vault-action-card__title-input"
+                    autoFocus
+                    value={draftTitle}
+                    onChange={(e) => setDraftTitle(e.target.value)}
+                    onBlur={commitTitle}
+                    onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                            e.preventDefault();
+                            commitTitle();
+                        } else if (e.key === 'Escape') {
+                            e.preventDefault();
+                            setEditingTitle(false);
+                        }
+                    }}
+                    onClick={(e) => e.stopPropagation()}
+                    onMouseDown={(e) => e.stopPropagation()}
+                    onDoubleClick={(e) => e.stopPropagation()}
+                />
+            ) : (
+                <div
+                    className="vault-action-card__title"
+                    onDoubleClick={startTitleEdit}
+                    title="Double-click to edit"
+                >
+                    {item.name__v}
+                </div>
+            )}
             <div className="vault-action-card__meta">
-                <span className="vault-action-card__owner">{ownerName}</span>
-                {item.due_date__c && (
-                    <span className="vault-action-card__due">Due {formatDate(item.due_date__c)}</span>
-                )}
+                <span className="vault-action-card__owner">
+                    <span className="vault-action-card__role-label">Created by</span> {ownerName}
+                </span>
             </div>
             <div className="vault-action-card__assignee-row">
+                <span className="vault-action-card__role-label">Assigned to</span>
                 {editingAssignee ? (
                     <UserTypeAhead
                         value={item.assignee__c}
@@ -1198,11 +1257,11 @@ function ActionCard({ item, ownerName, assigneeName, onStatusChange, onAssigneeC
                     />
                 ) : (
                     <button
-                        className="vault-assignee-btn"
+                        className={'vault-assignee-btn' + (assigneeName ? ' vault-assignee-btn--assigned' : '')}
                         onClick={(e) => { e.stopPropagation(); setEditingAssignee(true); }}
                         title="Click to assign"
                     >
-                        {assigneeName ? `→ ${assigneeName}` : '+ Assign'}
+                        {assigneeName || '+ Assign'}
                     </button>
                 )}
             </div>
@@ -1212,10 +1271,15 @@ function ActionCard({ item, ownerName, assigneeName, onStatusChange, onAssigneeC
                 onChange={(e) => onStatusChange(e.target.value)}
                 onClick={(e) => e.stopPropagation()}
             >
-                <option value="open__c">Open</option>
+                <option value="open__c">Not Started</option>
                 <option value="in_progress__c">In Progress</option>
                 <option value="done__c">Done</option>
             </select>
+            {item.due_date__c && (
+                <div className="vault-action-card__meta">
+                    <span className="vault-action-card__due">Due {formatDate(item.due_date__c)}</span>
+                </div>
+            )}
             {item.completed_at__c && (
                 <div className="vault-text-small vault-text-muted">
                     Completed {formatDateTime(item.completed_at__c)}

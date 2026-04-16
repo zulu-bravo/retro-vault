@@ -494,7 +494,9 @@
     gap: var(--vault-space-2);
 }
 
-/* Action Item card — same visual shape as feedback card, different content */
+/* Action Item card — same visual shape as feedback card, different content.
+   Status variants tint the card with Figma alert-bg tokens:
+   Open = white (default), In Progress = $orange-lightest, Done = $green-lightest. */
 .vault-action-card {
     background: var(--vault-surface);
     border: 1px solid var(--vault-border-subtle);
@@ -505,12 +507,36 @@
     gap: var(--vault-space-2);
 }
 
+.vault-action-card--in_progress {
+    background: var(--vault-warning-subtle);
+}
+
+.vault-action-card--done {
+    background: var(--vault-success-subtle);
+}
+
 .vault-action-card__title {
     font-size: var(--vault-font-size-md);
     font-weight: var(--vault-font-weight-medium);
     color: var(--vault-text-primary);
     line-height: 1.4;
     word-break: break-word;
+    cursor: text;
+}
+
+.vault-action-card__title-input {
+    width: 100%;
+    font-size: var(--vault-font-size-md);
+    font-weight: var(--vault-font-weight-medium);
+    color: var(--vault-text-primary);
+    line-height: 1.4;
+    font-family: inherit;
+    background: var(--vault-surface);
+    border: 1px solid var(--vault-primary);
+    border-radius: var(--vault-radius);
+    padding: 2px var(--vault-space-2);
+    outline: none;
+    box-shadow: 0 0 0 2px var(--vault-focus-ring);
 }
 
 .vault-action-card__meta {
@@ -523,7 +549,19 @@
     color: var(--vault-text-secondary);
 }
 
-.vault-action-card__owner { font-weight: var(--vault-font-weight-medium); }
+.vault-action-card__owner {
+    font-weight: var(--vault-font-weight-bold);
+    color: var(--vault-text-secondary);
+}
+
+/* Small role caption — "Created by" / "Assigned to" — lowercase + bold,
+   matched to the Kudos "from <name>" line style on the feedback card. */
+.vault-action-card__role-label {
+    font-size: var(--vault-font-size-xs);
+    font-weight: var(--vault-font-weight-bold);
+    color: var(--vault-text-secondary);
+    margin-right: var(--vault-space-1);
+}
 
 .vault-action-card__due { color: var(--vault-text-secondary); }
 
@@ -1054,9 +1092,11 @@
     color: var(--vault-primary);
 }
 
-/* Assignee field on ActionCard */
+/* Assignee field on ActionCard — parent card already provides an 8px gap,
+   so no extra margin-top here. */
 .vault-action-card__assignee-row {
-    margin-top: var(--vault-space-1);
+    display: flex;
+    align-items: center;
 }
 
 .vault-assignee-btn {
@@ -1078,6 +1118,21 @@
     color: var(--vault-primary);
     background: var(--vault-primary-subtle);
     border-style: solid;
+}
+
+/* Assigned state — stands out clearly against the lighter "Created by" line:
+   solid Figma $blue-default border, $blue-lightest fill, primary text, bold. */
+.vault-assignee-btn--assigned {
+    border: 1px solid var(--vault-primary);
+    border-style: solid;
+    background: var(--vault-primary-subtle);
+    color: var(--vault-primary);
+    font-weight: var(--vault-font-weight-semibold);
+}
+
+.vault-assignee-btn--assigned:hover {
+    background: var(--vault-primary);
+    color: var(--vault-text-on-brand);
 }
 
 /* Drag and drop */
