@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { fetchTeams, fetchBoards, userName } from '../api/vault';
+import { fetchTeams, fetchBoards, fetchAllActions, userName } from '../api/vault';
 import Spinner, { EmptyState } from '../components/Spinner';
 import { StatusBadge } from '../components/Badge';
 import { formatDate } from '../utils/format';
@@ -8,13 +8,21 @@ export default function Dashboard({ navigate, showToast }) {
     const [loading, setLoading] = useState(true);
     const [teams, setTeams] = useState([]);
     const [boards, setBoards] = useState([]);
+    const [openActionsByBoard, setOpenActionsByBoard] = useState({});
 
     useEffect(() => {
         (async () => {
             try {
-                const [t, b] = await Promise.all([fetchTeams(), fetchBoards()]);
+                const [t, b, actions] = await Promise.all([fetchTeams(), fetchBoards(), fetchAllActions()]);
                 setTeams(t);
                 setBoards(b);
+                const counts = {};
+                actions.forEach(a => {
+                    if (a.status__c !== 'done__c') {
+                        counts[a.retro_board__c] = (counts[a.retro_board__c] || 0) + 1;
+                    }
+                });
+                setOpenActionsByBoard(counts);
             } catch (err) {
                 showToast('Failed to load data: ' + err.message, 'error');
                 console.error(err);
@@ -42,7 +50,6 @@ export default function Dashboard({ navigate, showToast }) {
                     <p className="vault-page-header__subtitle">Team retrospective boards grouped by team</p>
                 </div>
                 <div className="vault-flex vault-gap-8">
-                    <button className="vault-btn vault-btn--secondary" onClick={() => navigate('seed')}>Seed Demo Data</button>
                     <button className="vault-btn vault-btn--primary" onClick={() => navigate('create-board')}>+ New Board</button>
                 </div>
             </div>
@@ -86,6 +93,11 @@ export default function Dashboard({ navigate, showToast }) {
                                                         Facilitator: {userName(board, 'facilitator')}
                                                     </span>
                                                 </div>
+                                                {openActionsByBoard[board.id] > 0 && (
+                                                    <div className="vault-board-card__open-actions">
+                                                        {openActionsByBoard[board.id]} open action{openActionsByBoard[board.id] !== 1 ? 's' : ''}
+                                                    </div>
+                                                )}
                                             </div>
                                         </div>
                                     ))}
