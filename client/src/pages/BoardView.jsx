@@ -705,6 +705,14 @@ export default function BoardView({ boardId, navigate, showToast }) {
                     </p>
                 </div>
                 <div className="vault-flex vault-gap-8">
+                    <button
+                        className="vault-action-btn"
+                        onClick={loadData}
+                        title="Refresh"
+                        aria-label="Refresh"
+                    >
+                        ↻
+                    </button>
                     <button className="vault-btn vault-btn--secondary" onClick={() => navigate('create-board', { boardId })}>
                         Board Settings
                     </button>
