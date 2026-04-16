@@ -1091,6 +1091,99 @@
     color: var(--vault-gray-500);
 }
 
+/* Multi-select highlight */
+.vault-feedback-card--selected {
+    border-color: var(--vault-primary);
+    box-shadow: 0 0 0 2px var(--vault-focus-ring);
+}
+
+/* Group card — wraps one or more feedback cards that have been grouped */
+.vault-group-card {
+    border: 1px dashed var(--vault-border-strong);
+    border-radius: var(--vault-radius);
+    background: var(--vault-surface-muted);
+    padding: var(--vault-space-2);
+    display: flex;
+    flex-direction: column;
+    gap: var(--vault-space-2);
+    transition: border-color 0.15s, background-color 0.15s;
+}
+
+.vault-group-card--dragging {
+    opacity: 0.35;
+}
+
+.vault-group-card--join-target {
+    border-color: var(--vault-primary);
+    border-style: solid;
+    background: var(--vault-primary-subtle);
+}
+
+.vault-group-card__header {
+    display: flex;
+    align-items: center;
+    gap: var(--vault-space-2);
+    padding: 2px var(--vault-space-1);
+    font-size: var(--vault-font-size-xs);
+    color: var(--vault-text-secondary);
+    font-weight: var(--vault-font-weight-medium);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    cursor: grab;
+    user-select: none;
+}
+
+.vault-group-card__header:active {
+    cursor: grabbing;
+}
+
+.vault-group-card__handle {
+    color: var(--vault-gray-300);
+    font-size: var(--vault-font-size-sm);
+}
+
+.vault-group-card:hover .vault-group-card__handle {
+    color: var(--vault-gray-500);
+}
+
+.vault-group-card__items {
+    display: flex;
+    flex-direction: column;
+    gap: var(--vault-space-2);
+}
+
+/* Context menu */
+.vault-context-menu {
+    position: fixed;
+    z-index: 3000;
+    background: var(--vault-surface);
+    border: 1px solid var(--vault-border);
+    border-radius: var(--vault-radius);
+    box-shadow: var(--vault-shadow-hover);
+    min-width: 140px;
+    padding: var(--vault-space-1) 0;
+    display: flex;
+    flex-direction: column;
+}
+
+.vault-context-menu__item {
+    display: block;
+    width: 100%;
+    text-align: left;
+    padding: 6px var(--vault-space-3);
+    border: 0;
+    background: transparent;
+    color: var(--vault-text-primary);
+    font-size: var(--vault-font-size-sm);
+    font-family: inherit;
+    cursor: pointer;
+}
+
+.vault-context-menu__item:hover {
+    background: var(--vault-primary-subtle);
+    color: var(--vault-primary);
+}
+
 /* Utilities */
 .vault-mt-8 { margin-top: var(--vault-space-2); }
 .vault-mt-16 { margin-top: var(--vault-space-4); }
