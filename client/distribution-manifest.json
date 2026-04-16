@@ -3,7 +3,11 @@
     "pages": [
         {
             "name": "retrovault__c",
-            "file": "dist/index.js"
+            "file": "dist/boards.js"
+        },
+        {
+            "name": "retrovault_insights__c",
+            "file": "dist/insights.js"
         }
     ],
     "stylesheets": [
