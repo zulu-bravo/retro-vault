@@ -1182,6 +1182,29 @@
     gap: var(--vault-space-2);
 }
 
+.vault-group-card__label {
+    cursor: text;
+}
+
+.vault-group-card__name-input {
+    flex: 1;
+    min-width: 0;
+    font: inherit;
+    color: var(--vault-text-primary);
+    text-transform: none;
+    letter-spacing: normal;
+    background: var(--vault-surface);
+    border: 1px solid var(--vault-border);
+    border-radius: var(--vault-radius-sm, 3px);
+    padding: 1px var(--vault-space-1);
+}
+
+.vault-group-card__name-input:focus {
+    outline: none;
+    border-color: var(--vault-primary);
+    box-shadow: 0 0 0 2px var(--vault-focus-ring);
+}
+
 /* Context menu */
 .vault-context-menu {
     position: fixed;
