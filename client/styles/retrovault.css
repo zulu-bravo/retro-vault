@@ -23,7 +23,6 @@
     --vault-silver-dark: #cccccc;             /* [Figma] $silver-dark — Input underline default */
     --vault-orange-default: #f8972b;          /* [Figma] $orange-default — Page Header bottom border */
     --vault-gold-default: #d4a017;            /* RetroVault — Kudos column accent */
-    --vault-gold-subtle: #fff8e1;             /* RetroVault — Kudos card background tint */
     --vault-blue-link: #0066cc;               /* [Figma] blue/link — Breadcrumb links */
     --vault-black: #1d1d1d;                   /* [Figma] $black — Body text */
     --vault-white: #ffffff;                   /* [Figma] $white */
@@ -448,18 +447,8 @@
     box-shadow: 0 1px 3px var(--vault-focus-ring);
 }
 
-/* Kudos card — gold left border, subtle tinted bg, recipient line on top */
-.vault-feedback-card--kudos {
-    background: var(--vault-gold-subtle);
-    border-left: 4px solid var(--vault-gold-default);
-}
-
-.vault-feedback-card--kudos:hover {
-    border-color: var(--vault-gold-default);
-    border-left-color: var(--vault-gold-default);
-    box-shadow: 0 1px 3px rgba(212, 160, 23, 0.25);
-}
-
+/* Kudos card — recipient line on top; uses default card chrome (no gold accent
+   on the card itself; the gold lives in the column header). */
 .vault-feedback-card__recipient {
     font-size: var(--vault-font-size-md);
     color: var(--vault-text-primary);
