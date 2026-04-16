@@ -195,19 +195,19 @@ function SentimentChart({ chart, hover, setHover }) {
     return (
         <div className="vault-chart" onMouseLeave={() => setHover(null)}>
             <svg className="vault-chart__svg" viewBox={`0 0 ${W} ${H}`} role="img" aria-label="Release sentiment by team">
-                {/* Sentiment zones — subtle green above 80%, subtle red below 20% */}
+                {/* Sentiment zones — subtle green above 75%, subtle red below 25% (aligned to Y-axis ticks) */}
                 <rect
                     x={PADDING.left}
                     y={PADDING.top}
                     width={plotW}
-                    height={yAt(80) - PADDING.top}
+                    height={yAt(75) - PADDING.top}
                     className="vault-chart__zone vault-chart__zone--positive"
                 />
                 <rect
                     x={PADDING.left}
-                    y={yAt(20)}
+                    y={yAt(25)}
                     width={plotW}
-                    height={yAt(0) - yAt(20)}
+                    height={yAt(0) - yAt(25)}
                     className="vault-chart__zone vault-chart__zone--negative"
                 />
 
