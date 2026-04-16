@@ -991,6 +991,44 @@
 .seed-log__line.info { color: var(--vault-primary); }
 .seed-log__line.success { color: var(--vault-success); }
 
+/* Drag and drop */
+.vault-feedback-card--dragging,
+.vault-action-card--dragging {
+    opacity: 0.35;
+}
+
+.vault-column__body--drag-over {
+    background: var(--vault-primary-subtle);
+    border-radius: 0 0 var(--vault-radius-lg) var(--vault-radius-lg);
+}
+
+.vault-column__body--drag-reject {
+    opacity: 0.5;
+    pointer-events: none;
+}
+
+.vault-drop-indicator {
+    height: 2px;
+    background: var(--vault-primary);
+    border-radius: 1px;
+    margin: 2px var(--vault-space-1);
+    flex-shrink: 0;
+}
+
+.vault-feedback-card__drag-handle,
+.vault-action-card__drag-handle {
+    font-size: var(--vault-font-size-sm);
+    color: var(--vault-gray-300);
+    cursor: grab;
+    margin-bottom: var(--vault-space-1);
+    user-select: none;
+}
+
+.vault-feedback-card:hover .vault-feedback-card__drag-handle,
+.vault-action-card:hover .vault-action-card__drag-handle {
+    color: var(--vault-gray-500);
+}
+
 /* Utilities */
 .vault-mt-8 { margin-top: var(--vault-space-2); }
 .vault-mt-16 { margin-top: var(--vault-space-4); }
