@@ -1,34 +1,39 @@
-import React, { useEffect, useState } from 'react';
-import { fetchAllFeedback, fetchAllActions, fetchBoards, fetchTeams } from '../api/vault';
+// Insights — Release Sentiment chart.
+// One line per team across releases (X-axis Z→A, newest left), Y-axis 0–100%
+// where sentiment = sum(votes for went_well) / sum(votes for went_well + to_improve).
+// If a (release, team) bucket has zero votes, falls back to item-count ratio so
+// the chart isn't blank for unvoted boards.
+import React, { useEffect, useState, useMemo } from 'react';
+import { fetchAllFeedback, fetchBoards, fetchTeams } from '../api/vault';
 import Spinner, { EmptyState } from '../components/Spinner';
-import { ThemeBadge } from '../components/Badge';
+
+// Up to 6 distinct team colors. Cycles if more teams.
+const TEAM_PALETTE = [
+    'var(--vault-success)',
+    'var(--vault-primary)',
+    'var(--vault-orange-darkest)',
+    'var(--vault-danger)',
+    'var(--vault-gold-default)',
+    'var(--vault-text-secondary)',
+];
 
 export default function Insights({ showToast }) {
     const [loading, setLoading] = useState(true);
-    const [data, setData] = useState(null);
+    const [feedback, setFeedback] = useState([]);
+    const [boards, setBoards] = useState([]);
+    const [teams, setTeams] = useState([]);
+    const [hover, setHover] = useState(null);
+    const [hiddenTeams, setHiddenTeams] = useState(() => new Set());
 
     useEffect(() => {
         (async () => {
             try {
-                const [feedback, actions, boards, teams] = await Promise.all([
-                    fetchAllFeedback(),
-                    fetchAllActions(),
-                    fetchBoards(),
-                    fetchTeams()
-                ]);
-
-                const boardTeam = {};
-                boards.forEach(b => { boardTeam[b.id] = b.team__c; });
-                const teamNames = {};
-                teams.forEach(t => { teamNames[t.id] = t.name__v; });
-
-                setData({
-                    blockers: computeBlockers(feedback),
-                    completion: computeCompletion(actions, boardTeam, teamNames),
-                    sentiment: computeSentiment(feedback, boardTeam, teamNames)
-                });
+                const [f, b, t] = await Promise.all([fetchAllFeedback(), fetchBoards(), fetchTeams()]);
+                setFeedback(f);
+                setBoards(b);
+                setTeams(t);
             } catch (err) {
-                showToast('Failed to load insights: ' + err.message, 'error');
+                showToast && showToast('Failed to load insights: ' + err.message, 'error');
                 console.error(err);
             } finally {
                 setLoading(false);
@@ -36,206 +41,389 @@ export default function Insights({ showToast }) {
         })();
     }, []);
 
+    const chart = useMemo(() => buildChart(feedback, boards, teams), [feedback, boards, teams]);
+
+    function toggleTeam(teamId) {
+        setHiddenTeams(prev => {
+            const next = new Set(prev);
+            if (next.has(teamId)) next.delete(teamId);
+            else next.add(teamId);
+            return next;
+        });
+        // Hovering a now-hidden team's marker would leave a stale tooltip
+        setHover(null);
+    }
+
+    function isolateTeam(teamId) {
+        if (!chart) return;
+        const others = chart.teamMeta.map(t => t.id).filter(id => id !== teamId);
+        const allOthersHidden = others.every(id => hiddenTeams.has(id));
+        // Already isolated → restore all
+        setHiddenTeams(allOthersHidden && !hiddenTeams.has(teamId) ? new Set() : new Set(others));
+        setHover(null);
+    }
+
+    function showAll() {
+        setHiddenTeams(new Set());
+    }
+
     if (loading) return <Spinner />;
-    if (!data) return <EmptyState message="No data available." />;
+    if (!chart || chart.releases.length === 0) {
+        return (
+            <>
+                <Header />
+                <div className="vault-card vault-mb-24">
+                    <div className="vault-card__body">
+                        <EmptyState message="No release sentiment yet — add some Went Well / To Improve feedback to a board with a Release Tag." />
+                    </div>
+                </div>
+            </>
+        );
+    }
+
+    const visibleSeries = chart.series.filter(s => !hiddenTeams.has(s.teamId));
 
     return (
         <>
-            <div className="vault-page-header">
-                <div>
-                    <h1 className="vault-page-header__title">Insights</h1>
-                    <p className="vault-page-header__subtitle">Analytics across all retrospective boards</p>
+            <Header />
+            <div className="vault-card vault-mb-24">
+                <div className="vault-card__header">
+                    <span className="vault-card__title">Release Sentiment</span>
+                </div>
+                <div className="vault-card__body">
+                    <p className="vault-text-small vault-text-muted vault-mb-16">
+                        For each release × team, sentiment = vote-weighted Went Well share of the total Went Well + To Improve. Higher means a happier retro. Click a team to hide it; double-click to isolate.
+                    </p>
+                    <Legend
+                        teams={chart.teamMeta}
+                        hiddenTeams={hiddenTeams}
+                        onToggle={toggleTeam}
+                        onIsolate={isolateTeam}
+                        onShowAll={showAll}
+                    />
+                    <SentimentChart chart={{ ...chart, series: visibleSeries }} hover={hover} setHover={setHover} />
+                    <SentimentTable chart={{ ...chart, series: visibleSeries }} />
                 </div>
             </div>
-
-            <BlockersPanel blockers={data.blockers} />
-            <CompletionPanel rows={data.completion} />
-            <SentimentPanel rows={data.sentiment} />
         </>
     );
 }
 
-/* ---------- Compute helpers ---------- */
-
-function computeBlockers(feedback) {
-    const negatives = feedback.filter(fi => fi.category__c === 'didnt_go_well__c' && fi.theme__c);
-    const themeMap = {};
-    negatives.forEach(fi => {
-        const theme = fi.theme__c;
-        if (!themeMap[theme]) themeMap[theme] = { theme, boards: new Set(), votes: 0, count: 0 };
-        themeMap[theme].boards.add(fi.retro_board__c);
-        themeMap[theme].votes += parseInt(fi.vote_count__c || 0, 10);
-        themeMap[theme].count++;
-    });
-
-    return Object.values(themeMap)
-        .map(t => ({ ...t, boardCount: t.boards.size }))
-        .filter(t => t.boardCount >= 2)
-        .sort((a, b) => b.boardCount - a.boardCount || b.votes - a.votes);
-}
-
-function computeCompletion(actions, boardTeam, teamNames) {
-    const stats = {};
-    actions.forEach(ai => {
-        const teamId = boardTeam[ai.retro_board__c] || 'unknown';
-        if (!stats[teamId]) stats[teamId] = { total: 0, done: 0, in_progress: 0, open: 0 };
-        stats[teamId].total++;
-        if (ai.status__c === 'done__c') stats[teamId].done++;
-        else if (ai.status__c === 'in_progress__c') stats[teamId].in_progress++;
-        else stats[teamId].open++;
-    });
-
-    return Object.entries(stats)
-        .map(([tid, s]) => ({
-            ...s,
-            teamName: teamNames[tid] || 'Unknown',
-            rate: s.total > 0 ? Math.round((s.done / s.total) * 100) : 0
-        }))
-        .sort((a, b) => b.rate - a.rate);
-}
-
-function computeSentiment(feedback, boardTeam, teamNames) {
-    const data = {};
-    feedback.forEach(fi => {
-        const teamId = boardTeam[fi.retro_board__c] || 'unknown';
-        if (!data[teamId]) data[teamId] = { went_well: 0, didnt_go_well: 0, boards: new Set() };
-        if (fi.category__c === 'went_well__c') data[teamId].went_well++;
-        else if (fi.category__c === 'didnt_go_well__c') data[teamId].didnt_go_well++;
-        data[teamId].boards.add(fi.retro_board__c);
-    });
-
-    return Object.entries(data)
-        .map(([tid, d]) => {
-            const total = d.went_well + d.didnt_go_well;
-            return {
-                ...d,
-                teamName: teamNames[tid] || 'Unknown',
-                ratio: total > 0 ? Math.round((d.went_well / total) * 100) : 0,
-                boardCount: d.boards.size
-            };
-        })
-        .sort((a, b) => b.ratio - a.ratio);
-}
-
-/* ---------- Panels ---------- */
-
-function BlockersPanel({ blockers }) {
+function Header() {
     return (
-        <div className="vault-card vault-mb-24">
-            <div className="vault-card__header">
-                <span className="vault-card__title">Recurring Blockers</span>
+        <div className="vault-page-header">
+            <div>
+                <h1 className="vault-page-header__title">Insights</h1>
+                <p className="vault-page-header__subtitle">Cross-release retrospective signals</p>
             </div>
-            {blockers.length === 0 ? (
-                <div className="vault-card__body">
-                    <EmptyState message="No recurring blockers found (themes must appear on 2+ boards)." />
-                </div>
-            ) : (
-                <table className="vault-table">
-                    <thead>
-                        <tr><th>Theme</th><th>Mentions</th><th>Boards</th><th>Total Votes</th></tr>
-                    </thead>
-                    <tbody>
-                        {blockers.map(b => (
-                            <tr key={b.theme}>
-                                <td><ThemeBadge theme={b.theme} /></td>
-                                <td>{b.count}</td>
-                                <td>{b.boardCount}</td>
-                                <td>{b.votes}</td>
-                            </tr>
-                        ))}
-                    </tbody>
-                </table>
+        </div>
+    );
+}
+
+/* ---------- Compute ---------- */
+
+function buildChart(feedback, boards, teams) {
+    if (!feedback.length || !boards.length) return null;
+
+    const boardById = new Map(boards.map(b => [b.id, b]));
+    const teamNameById = new Map(teams.map(t => [t.id, t.name__v]));
+
+    // bucket key = `${release}|${teamId}`
+    const buckets = new Map();
+    for (const fi of feedback) {
+        const board = boardById.get(fi.retro_board__c);
+        if (!board || !board.release_tag__c || !board.team__c) continue;
+        const cat = fi.category__c;
+        if (cat !== 'went_well__c' && cat !== 'didnt_go_well__c') continue;
+        const weight = Number(fi.vote_count__c) || 0;
+        const key = `${board.release_tag__c}|${board.team__c}`;
+        if (!buckets.has(key)) buckets.set(key, { wwVotes: 0, totalVotes: 0, wwCount: 0, totalCount: 0 });
+        const b = buckets.get(key);
+        b.totalVotes += weight;
+        b.totalCount += 1;
+        if (cat === 'went_well__c') {
+            b.wwVotes += weight;
+            b.wwCount += 1;
+        }
+    }
+
+    if (buckets.size === 0) return null;
+
+    // Releases sorted A→Z (ascending alphabetical = oldest first for the YYRX.X scheme,
+    // i.e. standard left-to-right timeline orientation)
+    const releases = [...new Set([...buckets.keys()].map(k => k.split('|')[0]))].sort();
+    // Team IDs that have at least one data point
+    const teamIds = [...new Set([...buckets.keys()].map(k => k.split('|')[1]))];
+
+    // Stable team order: by name asc
+    teamIds.sort((a, b) => (teamNameById.get(a) || a).localeCompare(teamNameById.get(b) || b));
+
+    const teamMeta = teamIds.map((id, i) => ({
+        id,
+        name: teamNameById.get(id) || id,
+        color: TEAM_PALETTE[i % TEAM_PALETTE.length],
+    }));
+
+    // Series: for each team, a list of points {release, x: index, sentiment, ...}
+    const series = teamMeta.map(t => {
+        const points = [];
+        releases.forEach((rel, x) => {
+            const b = buckets.get(`${rel}|${t.id}`);
+            if (!b || (b.totalCount === 0)) {
+                points.push({ release: rel, x, sentiment: null });
+                return;
+            }
+            // Vote-weighted; fall back to item-count if no votes recorded
+            const sentiment = b.totalVotes > 0
+                ? Math.round((b.wwVotes / b.totalVotes) * 100)
+                : Math.round((b.wwCount / b.totalCount) * 100);
+            points.push({
+                release: rel,
+                x,
+                sentiment,
+                wwVotes: b.wwVotes,
+                totalVotes: b.totalVotes,
+                wwCount: b.wwCount,
+                totalCount: b.totalCount,
+            });
+        });
+        return { teamId: t.id, teamName: t.name, color: t.color, points };
+    });
+
+    return { releases, teamMeta, series };
+}
+
+/* ---------- Render ---------- */
+
+function Legend({ teams, hiddenTeams, onToggle, onIsolate, onShowAll }) {
+    const anyHidden = hiddenTeams && hiddenTeams.size > 0;
+    return (
+        <div className="vault-chart-legend">
+            {teams.map(t => {
+                const hidden = hiddenTeams && hiddenTeams.has(t.id);
+                return (
+                    <button
+                        key={t.id}
+                        type="button"
+                        className={'vault-chart-legend__item vault-chart-legend__item--clickable' + (hidden ? ' vault-chart-legend__item--hidden' : '')}
+                        onClick={() => onToggle(t.id)}
+                        onDoubleClick={() => onIsolate(t.id)}
+                        title={hidden ? `Show ${t.name}` : `Hide ${t.name} (double-click to isolate)`}
+                    >
+                        <span className="vault-chart-legend__swatch" style={{ background: hidden ? 'var(--vault-gray-300)' : t.color }} />
+                        {t.name}
+                    </button>
+                );
+            })}
+            {anyHidden && (
+                <button
+                    type="button"
+                    className="vault-chart-legend__reset"
+                    onClick={onShowAll}
+                >
+                    Show all
+                </button>
             )}
         </div>
     );
 }
 
-function CompletionPanel({ rows }) {
+function SentimentChart({ chart, hover, setHover }) {
+    const { releases, series } = chart;
+    // Use a fixed viewBox; CSS scales it to container width
+    const W = 800, H = 320;
+    const PADDING = { top: 16, right: 24, bottom: 48, left: 44 };
+    const plotW = W - PADDING.left - PADDING.right;
+    const plotH = H - PADDING.top - PADDING.bottom;
+
+    // X positions: equally spaced, with half-step margin on each side
+    const n = releases.length;
+    const stepX = n > 1 ? plotW / (n - 1) : 0;
+    const xAt = i => PADDING.left + (n > 1 ? i * stepX : plotW / 2);
+
+    // Y: 0 at bottom, 100 at top
+    const yAt = pct => PADDING.top + plotH * (1 - pct / 100);
+
+    const yTicks = [0, 25, 50, 75, 100];
+
     return (
-        <div className="vault-card vault-mb-24">
-            <div className="vault-card__header">
-                <span className="vault-card__title">Action Item Completion Rates</span>
-            </div>
-            {rows.length === 0 ? (
-                <div className="vault-card__body"><EmptyState message="No action items found." /></div>
-            ) : (
-                <div className="vault-card__body">
-                    <div className="vault-bar-chart vault-mb-24">
-                        {rows.map(r => (
-                            <div key={r.teamName} className="vault-bar-row">
-                                <span className="vault-bar-label">{r.teamName}</span>
-                                <div className="vault-bar-track">
-                                    <div className="vault-bar-fill vault-bar-fill--green" style={{ width: r.rate + '%' }}>
-                                        {r.rate > 15 && `${r.rate}%`}
-                                    </div>
-                                </div>
-                                <span className="vault-bar-value">{r.rate}%</span>
-                            </div>
-                        ))}
-                    </div>
-                    <table className="vault-table">
-                        <thead>
-                            <tr><th>Team</th><th>Total</th><th>Done</th><th>In Progress</th><th>Not Started</th><th>Rate</th></tr>
-                        </thead>
-                        <tbody>
-                            {rows.map(r => (
-                                <tr key={r.teamName}>
-                                    <td className="vault-text-bold">{r.teamName}</td>
-                                    <td>{r.total}</td>
-                                    <td>{r.done}</td>
-                                    <td>{r.in_progress}</td>
-                                    <td>{r.open}</td>
-                                    <td className="vault-text-bold">{r.rate}%</td>
-                                </tr>
+        <div className="vault-chart" onMouseLeave={() => setHover(null)}>
+            <svg className="vault-chart__svg" viewBox={`0 0 ${W} ${H}`} role="img" aria-label="Release sentiment by team">
+                {/* Sentiment zones — subtle green above 75%, subtle red below 25% (aligned to Y-axis ticks) */}
+                <rect
+                    x={PADDING.left}
+                    y={PADDING.top}
+                    width={plotW}
+                    height={yAt(75) - PADDING.top}
+                    className="vault-chart__zone vault-chart__zone--positive"
+                />
+                <rect
+                    x={PADDING.left}
+                    y={yAt(25)}
+                    width={plotW}
+                    height={yAt(0) - yAt(25)}
+                    className="vault-chart__zone vault-chart__zone--negative"
+                />
+
+                {/* Y gridlines */}
+                {yTicks.map(t => (
+                    <g key={t}>
+                        <line
+                            x1={PADDING.left} x2={W - PADDING.right}
+                            y1={yAt(t)} y2={yAt(t)}
+                            className="vault-chart__gridline"
+                        />
+                        <text
+                            x={PADDING.left - 8} y={yAt(t)}
+                            className="vault-chart__y-label"
+                            textAnchor="end" dominantBaseline="middle"
+                        >
+                            {t}%
+                        </text>
+                    </g>
+                ))}
+
+                {/* X labels */}
+                {releases.map((rel, i) => (
+                    <text
+                        key={rel}
+                        x={xAt(i)} y={H - PADDING.bottom + 18}
+                        className="vault-chart__x-label"
+                        textAnchor="middle"
+                    >
+                        {rel}
+                    </text>
+                ))}
+
+                {/* X axis baseline */}
+                <line
+                    x1={PADDING.left} x2={W - PADDING.right}
+                    y1={yAt(0)} y2={yAt(0)}
+                    className="vault-chart__axis"
+                />
+
+                {/* Series lines */}
+                {series.map(s => {
+                    const segments = buildSegments(s.points);
+                    return (
+                        <g key={s.teamId}>
+                            {segments.map((seg, idx) => (
+                                <polyline
+                                    key={idx}
+                                    points={seg.map(p => `${xAt(p.x)},${yAt(p.sentiment)}`).join(' ')}
+                                    fill="none"
+                                    stroke={s.color}
+                                    strokeWidth="2"
+                                    strokeLinejoin="round"
+                                    strokeLinecap="round"
+                                />
                             ))}
-                        </tbody>
-                    </table>
-                </div>
-            )}
-        </div>
-    );
-}
+                        </g>
+                    );
+                })}
 
-function SentimentPanel({ rows }) {
-    return (
-        <div className="vault-card vault-mb-24">
-            <div className="vault-card__header">
-                <span className="vault-card__title">Team Sentiment</span>
-            </div>
-            {rows.length === 0 ? (
-                <div className="vault-card__body"><EmptyState message="No feedback data found." /></div>
-            ) : (
-                <table className="vault-table">
-                    <thead>
-                        <tr>
-                            <th>Team</th><th>Went Well</th><th>To Improve</th>
-                            <th>Ratio</th><th>Positive %</th><th>Boards</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {rows.map(r => {
-                            const barW = r.went_well + r.didnt_go_well;
-                            const greenPct = barW > 0 ? Math.round((r.went_well / barW) * 100) : 0;
-                            const redPct = 100 - greenPct;
+                {/* Markers + hover hit-areas (render on top of lines) */}
+                {series.map(s => (
+                    <g key={s.teamId + '-markers'}>
+                        {s.points.filter(p => p.sentiment !== null).map(p => {
+                            const cx = xAt(p.x), cy = yAt(p.sentiment);
+                            const isHover = hover && hover.teamId === s.teamId && hover.release === p.release;
                             return (
-                                <tr key={r.teamName}>
-                                    <td className="vault-text-bold">{r.teamName}</td>
-                                    <td>{r.went_well}</td>
-                                    <td>{r.didnt_go_well}</td>
-                                    <td>
-                                        <div className="vault-bar-track" style={{ height: 16, width: 120, display: 'inline-flex' }}>
-                                            <div className="vault-bar-fill vault-bar-fill--green" style={{ width: greenPct + '%', minWidth: 0, padding: 0 }}></div>
-                                            <div className="vault-bar-fill vault-bar-fill--red" style={{ width: redPct + '%', minWidth: 0, padding: 0, borderRadius: '0 12px 12px 0' }}></div>
-                                        </div>
-                                    </td>
-                                    <td className="vault-text-bold">{r.ratio}%</td>
-                                    <td>{r.boardCount}</td>
-                                </tr>
+                                <g key={p.release}>
+                                    <circle
+                                        cx={cx} cy={cy}
+                                        r={isHover ? 6 : 4}
+                                        fill="white" stroke={s.color} strokeWidth="2"
+                                    />
+                                    {/* Larger transparent hit area */}
+                                    <circle
+                                        cx={cx} cy={cy} r="14"
+                                        fill="transparent"
+                                        onMouseEnter={() => setHover({ teamId: s.teamId, teamName: s.teamName, color: s.color, ...p })}
+                                    />
+                                </g>
                             );
                         })}
-                    </tbody>
-                </table>
-            )}
+                    </g>
+                ))}
+
+                {/* Tooltip */}
+                {hover && hover.sentiment !== null && (
+                    <Tooltip x={xAt(hover.x)} y={yAt(hover.sentiment)} hover={hover} chartW={W} />
+                )}
+            </svg>
         </div>
+    );
+}
+
+// Split a series into contiguous non-null segments so we don't draw lines
+// across "no data" gaps.
+function buildSegments(points) {
+    const segs = [];
+    let cur = [];
+    for (const p of points) {
+        if (p.sentiment === null) {
+            if (cur.length > 1) segs.push(cur);
+            cur = [];
+        } else {
+            cur.push(p);
+        }
+    }
+    if (cur.length > 1) segs.push(cur);
+    return segs;
+}
+
+function Tooltip({ x, y, hover, chartW }) {
+    const W = 200, H = 78;
+    // Flip horizontally if tooltip would overflow the right side
+    const onRight = x + W + 12 > chartW;
+    const tx = onRight ? x - W - 12 : x + 12;
+    const ty = Math.max(8, y - H / 2);
+    const voted = hover.totalVotes > 0;
+
+    return (
+        <g className="vault-chart__tooltip" pointerEvents="none">
+            <rect x={tx} y={ty} width={W} height={H} rx="4" className="vault-chart__tooltip-bg" />
+            <text x={tx + 12} y={ty + 18} className="vault-chart__tooltip-title">
+                <tspan fill={hover.color}>● </tspan>{hover.teamName}
+            </text>
+            <text x={tx + 12} y={ty + 36} className="vault-chart__tooltip-meta">
+                {hover.release} — <tspan className="vault-chart__tooltip-value">{hover.sentiment}%</tspan>
+            </text>
+            <text x={tx + 12} y={ty + 54} className="vault-chart__tooltip-meta">
+                {voted
+                    ? `${hover.wwVotes} of ${hover.totalVotes} votes positive`
+                    : `${hover.wwCount} of ${hover.totalCount} items positive`}
+            </text>
+            <text x={tx + 12} y={ty + 70} className="vault-chart__tooltip-meta">
+                {hover.totalCount} feedback item{hover.totalCount === 1 ? '' : 's'}{voted ? '' : ' (no votes)'}
+            </text>
+        </g>
+    );
+}
+
+function SentimentTable({ chart }) {
+    const { releases, series } = chart;
+    return (
+        <table className="vault-table vault-mt-24">
+            <thead>
+                <tr>
+                    <th>Team</th>
+                    {releases.map(r => <th key={r}>{r}</th>)}
+                </tr>
+            </thead>
+            <tbody>
+                {series.map(s => (
+                    <tr key={s.teamId}>
+                        <td className="vault-text-bold">
+                            <span className="vault-chart-legend__swatch" style={{ background: s.color }} /> {s.teamName}
+                        </td>
+                        {s.points.map(p => (
+                            <td key={p.release}>{p.sentiment === null ? '—' : `${p.sentiment}%`}</td>
+                        ))}
+                    </tr>
+                ))}
+            </tbody>
+        </table>
     );
 }

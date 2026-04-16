@@ -999,6 +999,133 @@
 .vault-empty__icon { font-size: var(--vault-space-12); margin-bottom: var(--vault-space-3); }
 .vault-empty__text { font-size: var(--vault-font-size-md); }
 
+/* Line Chart (Insights — Release Sentiment) */
+.vault-chart {
+    width: 100%;
+    overflow: visible;
+}
+
+.vault-chart__svg {
+    display: block;
+    width: 100%;
+    height: auto;
+    overflow: visible;
+}
+
+.vault-chart__zone {
+    fill-opacity: 0.55;
+}
+
+.vault-chart__zone--positive {
+    fill: var(--vault-success-subtle);
+}
+
+.vault-chart__zone--negative {
+    fill: var(--vault-danger-subtle);
+}
+
+.vault-chart__gridline {
+    stroke: var(--vault-border-subtle);
+    stroke-width: 1;
+    stroke-dasharray: 2 4;
+}
+
+.vault-chart__axis {
+    stroke: var(--vault-border);
+    stroke-width: 1;
+}
+
+.vault-chart__y-label,
+.vault-chart__x-label {
+    font-family: var(--vault-font-family);
+    font-size: 11px;
+    fill: var(--vault-text-secondary);
+}
+
+.vault-chart__tooltip-bg {
+    fill: var(--vault-surface);
+    stroke: var(--vault-border);
+    stroke-width: 1;
+    filter: drop-shadow(0 2px 6px rgba(0, 0, 0, 0.12));
+}
+
+.vault-chart__tooltip-title {
+    font-family: var(--vault-font-family);
+    font-size: 12px;
+    font-weight: var(--vault-font-weight-bold);
+    fill: var(--vault-text-primary);
+}
+
+.vault-chart__tooltip-meta {
+    font-family: var(--vault-font-family);
+    font-size: 11px;
+    fill: var(--vault-text-secondary);
+}
+
+.vault-chart__tooltip-value {
+    font-weight: var(--vault-font-weight-bold);
+    fill: var(--vault-text-primary);
+}
+
+.vault-chart-legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--vault-space-4);
+    margin-bottom: var(--vault-space-3);
+    font-size: var(--vault-font-size-sm);
+    color: var(--vault-text-primary);
+}
+
+.vault-chart-legend__item {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.vault-chart-legend__item--clickable {
+    cursor: pointer;
+    background: transparent;
+    border: 1px solid transparent;
+    color: var(--vault-text-primary);
+    font: inherit;
+    padding: 2px 8px;
+    border-radius: var(--vault-radius);
+    user-select: none;
+    transition: background-color 0.12s ease, border-color 0.12s ease, opacity 0.12s ease;
+}
+
+.vault-chart-legend__item--clickable:hover {
+    background: var(--vault-silver-light);
+    border-color: var(--vault-silver-default);
+}
+
+.vault-chart-legend__item--hidden {
+    opacity: 0.5;
+    text-decoration: line-through;
+}
+
+.vault-chart-legend__reset {
+    cursor: pointer;
+    background: transparent;
+    border: 0;
+    font: inherit;
+    color: var(--vault-primary);
+    padding: 2px 8px;
+    border-radius: var(--vault-radius);
+}
+
+.vault-chart-legend__reset:hover {
+    text-decoration: underline;
+}
+
+.vault-chart-legend__swatch {
+    display: inline-block;
+    width: 12px;
+    height: 12px;
+    border-radius: 2px;
+    vertical-align: middle;
+}
+
 /* Bar Chart */
 .vault-bar-chart { display: flex; flex-direction: column; gap: var(--vault-space-3); }
 
