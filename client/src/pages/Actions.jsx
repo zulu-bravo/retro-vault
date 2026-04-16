@@ -124,7 +124,7 @@ function OverduePanel({ rows, onRowClick }) {
     return (
         <div className="vault-card">
             <div className="vault-card__header">
-                <span className="vault-card__title">Overdue Actions</span>
+                <span className="vault-card__title">Overdue Open Actions</span>
             </div>
             <div className="vault-card__body">
                 {rows.length === 0 ? (
@@ -132,7 +132,7 @@ function OverduePanel({ rows, onRowClick }) {
                 ) : (
                     <table className="vault-table">
                         <thead>
-                            <tr><th>Assignee</th><th>Overdue</th></tr>
+                            <tr><th>Assignee</th><th>Overdue Items</th></tr>
                         </thead>
                         <tbody>
                             {rows.map(row => (
@@ -170,11 +170,11 @@ function CompletionRatePanel({ rows }) {
                         <div className="vault-chart-legend">
                             <span className="vault-chart-legend__item">
                                 <span className="vault-chart-swatch vault-chart-swatch--green" />
-                                On-time
+                                Completed on-time
                             </span>
                             <span className="vault-chart-legend__item">
                                 <span className="vault-chart-swatch vault-chart-swatch--red" />
-                                Overdue
+                                Completed late
                             </span>
                         </div>
                         <div className="vault-bar-chart">
@@ -195,7 +195,7 @@ function CompletionRatePanel({ rows }) {
                                                         padding: 0,
                                                         borderRadius: hasBoth ? '12px 0 0 12px' : ''
                                                     }}
-                                                    title={`${r.onTime} on-time`}
+                                                    title={`${r.onTime} completed on-time`}
                                                 />
                                             )}
                                             {r.overdue > 0 && (
@@ -207,7 +207,7 @@ function CompletionRatePanel({ rows }) {
                                                         padding: 0,
                                                         borderRadius: hasBoth ? '0 12px 12px 0' : ''
                                                     }}
-                                                    title={`${r.overdue} overdue`}
+                                                    title={`${r.overdue} completed late`}
                                                 />
                                             )}
                                         </div>
