@@ -152,7 +152,7 @@ export async function fetchBoard(boardId) {
 export async function fetchFeedbackForBoard(boardId) {
     return query(
         "SELECT id, name__v, retro_board__c, author__c, author__cr.name__v, " +
-        "category__c, content__c, theme__c, feature__c, vote_count__c " +
+        "category__c, content__c, theme__c, feature__c, vote_count__c, group__c " +
         "FROM retro_feedback__c " +
         `WHERE retro_board__c = '${escapeVql(boardId)}'`
     );

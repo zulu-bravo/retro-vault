@@ -86,3 +86,14 @@ ALTER Object retro_feedback__c (
         list_column(false)
     )
 );
+
+ALTER Object retro_feedback__c (
+    add Field group__c (
+        label('Group'),
+        type('String'),
+        max_length(50),
+        active(true),
+        required(false),
+        list_column(false)
+    )
+);

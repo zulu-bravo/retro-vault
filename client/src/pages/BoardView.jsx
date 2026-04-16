@@ -32,6 +32,29 @@ const THEMES = [
     { name: 'other__c', label: 'Other' }
 ];
 
+function generateGroupId() {
+    return 'g_' + Math.random().toString(36).slice(2, 10) + Date.now().toString(36).slice(-4);
+}
+
+// Build the display order for a category: array of { type: 'card', item } | { type: 'group', groupId, items }.
+// Preserves the order of `items`; a group appears at the position of its first member.
+function buildColumnDisplay(items) {
+    const result = [];
+    const seen = new Set();
+    for (const item of items) {
+        const gid = item.group__c;
+        if (gid) {
+            if (seen.has(gid)) continue;
+            seen.add(gid);
+            const groupItems = items.filter(x => x.group__c === gid);
+            result.push({ type: 'group', groupId: gid, items: groupItems });
+        } else {
+            result.push({ type: 'card', item });
+        }
+    }
+    return result;
+}
+
 export default function BoardView({ boardId, navigate, showToast }) {
     const currentUserId = getCurrentUserId();
 
@@ -52,10 +75,23 @@ export default function BoardView({ boardId, navigate, showToast }) {
     const [aiAssigneeId, setAiAssigneeId] = useState('');
     const [aiAssigneeName, setAiAssigneeName] = useState('');
 
-    // Drag and drop state
-    const dragRef = useRef(null); // { type: 'feedback'|'action', id, category }
-    const [dragging, setDragging] = useState(null); // same shape as dragRef, triggers re-render
-    const [dropTarget, setDropTarget] = useState(null); // { column, overId, before }
+    // Multi-select for grouping (Cmd/Ctrl+click)
+    const [selectedIds, setSelectedIds] = useState(() => new Set());
+    // Context menu: { x, y, kind: 'cards'|'group', ids?, groupId? }
+    const [contextMenu, setContextMenu] = useState(null);
+
+    // Drag state
+    // dragRef shape:
+    //   { type: 'feedback', id, category, fromGroupId }
+    //   { type: 'action',   id }
+    //   { type: 'group',    groupId, category }
+    const dragRef = useRef(null);
+    const [dragging, setDragging] = useState(null);
+    // dropTarget shape:
+    //   { column, overId, before, isGroup: false }           (card target — before/after)
+    //   { column, overId, before, isGroup: true,  intoGroup: false } (group target — position)
+    //   { column, overId,          isGroup: true,  intoGroup: true }  (group target — join)
+    const [dropTarget, setDropTarget] = useState(null);
 
     const loadData = useCallback(async () => {
         try {
@@ -66,11 +102,9 @@ export default function BoardView({ boardId, navigate, showToast }) {
                 currentUserId ? fetchVotesForUser(currentUserId) : Promise.resolve([])
             ]);
             setBoard(b);
-            // Sort by vote count on initial load; drag-and-drop reorders from here
             setFeedback(f.sort((a, b) => parseInt(b.vote_count__c || 0, 10) - parseInt(a.vote_count__c || 0, 10)));
             setActions(a);
 
-            // Filter votes to only those for this board's feedback items
             const boardFeedbackIds = new Set(f.map(fi => fi.id));
             const votes = {};
             v.forEach(vote => {
@@ -258,11 +292,96 @@ export default function BoardView({ boardId, navigate, showToast }) {
         }
     }
 
+    /* ---------- Multi-select + Context Menu ---------- */
+
+    function handleCardClick(e, item) {
+        if (e.metaKey || e.ctrlKey) {
+            e.preventDefault();
+            e.stopPropagation();
+            setSelectedIds(prev => {
+                const next = new Set(prev);
+                if (next.has(item.id)) next.delete(item.id);
+                else next.add(item.id);
+                return next;
+            });
+            return;
+        }
+        openEditFeedback(item);
+    }
+
+    function handleCardContextMenu(e, item) {
+        e.preventDefault();
+        e.stopPropagation();
+        // Grouping only makes sense for 2+ items in the same category
+        if (!selectedIds.has(item.id) || selectedIds.size < 2) {
+            return;
+        }
+        const ids = Array.from(selectedIds);
+        // Guard: all selected must be in the same category
+        const cats = new Set(ids.map(id => {
+            const it = feedback.find(f => f.id === id);
+            return it ? it.category__c : null;
+        }));
+        if (cats.size !== 1) {
+            showToast('Group members must be in the same column.', 'error');
+            return;
+        }
+        setContextMenu({ x: e.clientX, y: e.clientY, kind: 'cards', ids });
+    }
+
+    function handleGroupContextMenu(e, groupId) {
+        e.preventDefault();
+        e.stopPropagation();
+        setContextMenu({ x: e.clientX, y: e.clientY, kind: 'group', groupId });
+    }
+
+    function closeContextMenu() {
+        setContextMenu(null);
+    }
+
+    async function groupSelectedItems() {
+        const ids = contextMenu?.ids || [];
+        if (ids.length < 2) { closeContextMenu(); return; }
+        const groupId = generateGroupId();
+        try {
+            await Promise.all(ids.map(id =>
+                update('retro_feedback__c', id, { group__c: groupId })
+            ));
+            setFeedback(prev => prev.map(f =>
+                ids.includes(f.id) ? { ...f, group__c: groupId } : f
+            ));
+            setSelectedIds(new Set());
+            showToast(`Grouped ${ids.length} items`, 'success');
+        } catch (err) {
+            showToast('Grouping failed: ' + err.message, 'error');
+        }
+        closeContextMenu();
+    }
+
+    async function ungroupItems(groupId) {
+        const ids = feedback.filter(f => f.group__c === groupId).map(f => f.id);
+        if (ids.length === 0) { closeContextMenu(); return; }
+        try {
+            await Promise.all(ids.map(id =>
+                update('retro_feedback__c', id, { group__c: '' })
+            ));
+            setFeedback(prev => prev.map(f =>
+                ids.includes(f.id) ? { ...f, group__c: '' } : f
+            ));
+            showToast('Ungrouped', 'success');
+        } catch (err) {
+            showToast('Ungrouping failed: ' + err.message, 'error');
+        }
+        closeContextMenu();
+    }
+
     /* ---------- Drag and Drop ---------- */
 
-    function onDragStart(type, id, category) {
-        dragRef.current = { type, id, category };
-        setDragging({ type, id, category });
+    function onDragStart(payload) {
+        dragRef.current = payload;
+        setDragging(payload);
+        // Clear any open context menu / selection highlight while dragging
+        setContextMenu(null);
     }
 
     function onDragEnd() {
@@ -274,7 +393,7 @@ export default function BoardView({ boardId, navigate, showToast }) {
     function isValidDrop(columnKey) {
         const drag = dragRef.current;
         if (!drag) return false;
-        if (columnKey === 'action' && drag.type === 'feedback') return false;
+        if (columnKey === 'action' && (drag.type === 'feedback' || drag.type === 'group')) return false;
         if (columnKey !== 'action' && drag.type === 'action') return false;
         return true;
     }
@@ -286,9 +405,44 @@ export default function BoardView({ boardId, navigate, showToast }) {
             return;
         }
         e.dataTransfer.dropEffect = 'move';
+        e.stopPropagation();
         const rect = e.currentTarget.getBoundingClientRect();
         const before = e.clientY < rect.top + rect.height / 2;
-        setDropTarget({ column: columnKey, overId, before });
+        setDropTarget({ column: columnKey, overId, before, isGroup: false });
+    }
+
+    function onGroupDragOver(e, columnKey, groupId) {
+        e.preventDefault();
+        if (!isValidDrop(columnKey)) {
+            e.dataTransfer.dropEffect = 'none';
+            return;
+        }
+        e.dataTransfer.dropEffect = 'move';
+        e.stopPropagation();
+
+        const drag = dragRef.current;
+        if (!drag) return;
+
+        const rect = e.currentTarget.getBoundingClientRect();
+        const y = e.clientY - rect.top;
+        const h = rect.height;
+
+        // Groups can't nest into groups; cards already in this group can't re-join
+        const canJoin =
+            drag.type === 'feedback' && drag.fromGroupId !== groupId;
+
+        if (!canJoin) {
+            setDropTarget({ column: columnKey, overId: groupId, before: y < h / 2, isGroup: true, intoGroup: false });
+            return;
+        }
+
+        if (y < h * 0.25) {
+            setDropTarget({ column: columnKey, overId: groupId, before: true, isGroup: true, intoGroup: false });
+        } else if (y > h * 0.75) {
+            setDropTarget({ column: columnKey, overId: groupId, before: false, isGroup: true, intoGroup: false });
+        } else {
+            setDropTarget({ column: columnKey, overId: groupId, isGroup: true, intoGroup: true });
+        }
     }
 
     function onColumnDragOver(e, columnKey) {
@@ -298,9 +452,8 @@ export default function BoardView({ boardId, navigate, showToast }) {
             return;
         }
         e.dataTransfer.dropEffect = 'move';
-        // Only set drop target to "end of column" when directly over the column body (not a card)
         if (e.target === e.currentTarget) {
-            setDropTarget({ column: columnKey, overId: null, before: false });
+            setDropTarget({ column: columnKey, overId: null, before: false, isGroup: false });
         }
     }
 
@@ -317,55 +470,141 @@ export default function BoardView({ boardId, navigate, showToast }) {
             onDragEnd();
             return;
         }
-
         const dt = dropTarget;
 
-        if (drag.type === 'feedback') {
-            const item = feedback.find(f => f.id === drag.id);
-            if (!item) { onDragEnd(); return; }
-            const newCategory = columnKey;
-
-            const rest = feedback.filter(f => f.id !== drag.id);
-            let insertIdx;
-            if (dt && dt.overId) {
-                const overIdx = rest.findIndex(f => f.id === dt.overId);
-                insertIdx = overIdx >= 0 ? (dt.before ? overIdx : overIdx + 1) : rest.length;
-            } else {
-                // Insert at end of the target category's items
-                const catEntries = rest.map((f, i) => ({ f, i })).filter(({ f }) => f.category__c === newCategory);
-                insertIdx = catEntries.length > 0 ? catEntries[catEntries.length - 1].i + 1 : rest.length;
-            }
-
-            const newList = [...rest];
-            newList.splice(insertIdx, 0, { ...item, category__c: newCategory });
-            setFeedback(newList);
-
-            if (drag.category !== newCategory) {
-                update('retro_feedback__c', drag.id, { category__c: newCategory }).catch(err => {
-                    showToast('Failed to move card: ' + err.message, 'error');
-                    loadData();
-                });
-            }
+        if (drag.type === 'action') {
+            handleActionDrop(drag, dt);
+        } else if (drag.type === 'group') {
+            handleGroupDrop(drag, columnKey, dt);
         } else {
-            // action type
-            const item = actions.find(a => a.id === drag.id);
-            if (!item) { onDragEnd(); return; }
-
-            const rest = actions.filter(a => a.id !== drag.id);
-            let insertIdx;
-            if (dt && dt.overId) {
-                const overIdx = rest.findIndex(a => a.id === dt.overId);
-                insertIdx = overIdx >= 0 ? (dt.before ? overIdx : overIdx + 1) : rest.length;
-            } else {
-                insertIdx = rest.length;
-            }
-
-            const newList = [...rest];
-            newList.splice(insertIdx, 0, item);
-            setActions(newList);
+            handleFeedbackDrop(drag, columnKey, dt);
         }
 
         onDragEnd();
+    }
+
+    function handleActionDrop(drag, dt) {
+        const item = actions.find(a => a.id === drag.id);
+        if (!item) return;
+        const rest = actions.filter(a => a.id !== drag.id);
+        let insertIdx;
+        if (dt && dt.overId) {
+            const overIdx = rest.findIndex(a => a.id === dt.overId);
+            insertIdx = overIdx >= 0 ? (dt.before ? overIdx : overIdx + 1) : rest.length;
+        } else {
+            insertIdx = rest.length;
+        }
+        const newList = [...rest];
+        newList.splice(insertIdx, 0, item);
+        setActions(newList);
+    }
+
+    function handleGroupDrop(drag, columnKey, dt) {
+        const groupItems = feedback.filter(f => f.group__c === drag.groupId);
+        if (groupItems.length === 0) return;
+
+        const rest = feedback.filter(f => f.group__c !== drag.groupId);
+        let insertIdx = rest.length;
+
+        if (dt && dt.overId && dt.isGroup && dt.overId !== drag.groupId) {
+            // Position relative to another group (no nesting — always before/after)
+            if (dt.before) {
+                const idx = rest.findIndex(f => f.group__c === dt.overId);
+                insertIdx = idx >= 0 ? idx : rest.length;
+            } else {
+                let lastIdx = -1;
+                rest.forEach((f, i) => { if (f.group__c === dt.overId) lastIdx = i; });
+                insertIdx = lastIdx >= 0 ? lastIdx + 1 : rest.length;
+            }
+        } else if (dt && dt.overId && !dt.isGroup) {
+            // Position relative to a card
+            const overIdx = rest.findIndex(f => f.id === dt.overId);
+            if (overIdx >= 0) insertIdx = dt.before ? overIdx : overIdx + 1;
+        } else {
+            // End of target category
+            const catEntries = rest.map((f, i) => ({ f, i })).filter(({ f }) => f.category__c === columnKey);
+            insertIdx = catEntries.length > 0 ? catEntries[catEntries.length - 1].i + 1 : rest.length;
+        }
+
+        const categoryChanged = drag.category !== columnKey;
+        const moved = categoryChanged
+            ? groupItems.map(f => ({ ...f, category__c: columnKey }))
+            : groupItems;
+
+        const newList = [...rest];
+        newList.splice(insertIdx, 0, ...moved);
+        setFeedback(newList);
+
+        if (categoryChanged) {
+            Promise.all(groupItems.map(f =>
+                update('retro_feedback__c', f.id, { category__c: columnKey })
+            )).catch(err => {
+                showToast('Failed to move group: ' + err.message, 'error');
+                loadData();
+            });
+        }
+    }
+
+    function handleFeedbackDrop(drag, columnKey, dt) {
+        const item = feedback.find(f => f.id === drag.id);
+        if (!item) return;
+        const currentGroupId = item.group__c || '';
+
+        let newGroupId = '';
+        let newCategory = columnKey;
+        let insertIdx;
+
+        const rest = feedback.filter(f => f.id !== drag.id);
+
+        if (dt && dt.isGroup && dt.intoGroup) {
+            // Join the target group; inherit its category
+            newGroupId = dt.overId;
+            const groupItem = rest.find(f => f.group__c === dt.overId);
+            if (groupItem) newCategory = groupItem.category__c;
+            let lastIdx = -1;
+            rest.forEach((f, i) => { if (f.group__c === dt.overId) lastIdx = i; });
+            insertIdx = lastIdx >= 0 ? lastIdx + 1 : rest.length;
+        } else if (dt && dt.isGroup && !dt.intoGroup) {
+            // Position relative to a group as standalone (leave any previous group)
+            if (dt.before) {
+                const idx = rest.findIndex(f => f.group__c === dt.overId);
+                insertIdx = idx >= 0 ? idx : rest.length;
+            } else {
+                let lastIdx = -1;
+                rest.forEach((f, i) => { if (f.group__c === dt.overId) lastIdx = i; });
+                insertIdx = lastIdx >= 0 ? lastIdx + 1 : rest.length;
+            }
+        } else if (dt && dt.overId) {
+            // Over a card — inherit that card's group membership & category
+            const overIdx = rest.findIndex(f => f.id === dt.overId);
+            if (overIdx >= 0) {
+                const target = rest[overIdx];
+                newGroupId = target.group__c || '';
+                newCategory = target.category__c;
+                insertIdx = dt.before ? overIdx : overIdx + 1;
+            } else {
+                insertIdx = rest.length;
+            }
+        } else {
+            // End of the target column, standalone
+            const catEntries = rest.map((f, i) => ({ f, i })).filter(({ f }) => f.category__c === newCategory);
+            insertIdx = catEntries.length > 0 ? catEntries[catEntries.length - 1].i + 1 : rest.length;
+        }
+
+        const updatedItem = { ...item, category__c: newCategory, group__c: newGroupId };
+        const newList = [...rest];
+        newList.splice(insertIdx, 0, updatedItem);
+        setFeedback(newList);
+
+        const updates = {};
+        if (drag.category !== newCategory) updates.category__c = newCategory;
+        if (currentGroupId !== newGroupId) updates.group__c = newGroupId;
+        if (Object.keys(updates).length > 0) {
+            update('retro_feedback__c', drag.id, updates).catch(err => {
+                showToast('Failed to move: ' + err.message, 'error');
+                loadData();
+            });
+        }
     }
 
     if (loading) return <Spinner />;
@@ -395,6 +634,7 @@ export default function BoardView({ boardId, navigate, showToast }) {
             <div className="vault-columns">
                 {CATEGORIES.map(cat => {
                     const items = feedback.filter(fi => fi.category__c === cat.key);
+                    const entries = buildColumnDisplay(items);
                     const isDragOver = dragging && dropTarget?.column === cat.key;
                     const isValidTarget = dragging && isValidDrop(cat.key);
 
@@ -428,31 +668,72 @@ export default function BoardView({ boardId, navigate, showToast }) {
                                         + Add
                                     </button>
                                 )}
-                                {items.length === 0 && !isDragOver ? (
+                                {entries.length === 0 && !isDragOver ? (
                                     <div className="vault-empty vault-text-small" style={{ padding: 16 }}>No items yet</div>
                                 ) : (
-                                    items.map(item => (
-                                        <React.Fragment key={item.id}>
-                                            {dropTarget?.column === cat.key && dropTarget?.overId === item.id && dropTarget?.before && (
-                                                <div className="vault-drop-indicator" />
-                                            )}
-                                            <FeedbackCard
-                                                item={item}
-                                                authorName={userName(item, 'author')}
-                                                isVoted={!!userVotes[item.id]}
-                                                onVote={() => toggleVote(item.id)}
-                                                canVote={!!currentUserId}
-                                                onEdit={() => openEditFeedback(item)}
-                                                isDragging={dragging?.id === item.id}
-                                                onDragStart={() => onDragStart('feedback', item.id, item.category__c)}
-                                                onDragOver={(e) => onCardDragOver(e, cat.key, item.id)}
-                                                onDragEnd={onDragEnd}
-                                            />
-                                            {dropTarget?.column === cat.key && dropTarget?.overId === item.id && !dropTarget?.before && (
-                                                <div className="vault-drop-indicator" />
-                                            )}
-                                        </React.Fragment>
-                                    ))
+                                    entries.map(entry => {
+                                        if (entry.type === 'group') {
+                                            const g = entry;
+                                            return (
+                                                <React.Fragment key={'g:' + g.groupId}>
+                                                    {dropTarget?.column === cat.key && dropTarget?.overId === g.groupId && dropTarget?.isGroup && dropTarget?.before === true && (
+                                                        <div className="vault-drop-indicator" />
+                                                    )}
+                                                    <GroupCard
+                                                        groupId={g.groupId}
+                                                        items={g.items}
+                                                        columnKey={cat.key}
+                                                        dragging={dragging}
+                                                        dropTarget={dropTarget}
+                                                        userVotes={userVotes}
+                                                        currentUserId={currentUserId}
+                                                        selectedIds={selectedIds}
+                                                        onToggleVote={toggleVote}
+                                                        onCardClick={handleCardClick}
+                                                        onCardContextMenu={handleCardContextMenu}
+                                                        onGroupContextMenu={handleGroupContextMenu}
+                                                        onCardDragStart={(item) =>
+                                                            onDragStart({ type: 'feedback', id: item.id, category: item.category__c, fromGroupId: g.groupId })
+                                                        }
+                                                        onGroupDragStart={() =>
+                                                            onDragStart({ type: 'group', groupId: g.groupId, category: cat.key })
+                                                        }
+                                                        onCardDragOver={onCardDragOver}
+                                                        onGroupDragOver={onGroupDragOver}
+                                                        onDragEnd={onDragEnd}
+                                                    />
+                                                    {dropTarget?.column === cat.key && dropTarget?.overId === g.groupId && dropTarget?.isGroup && dropTarget?.before === false && (
+                                                        <div className="vault-drop-indicator" />
+                                                    )}
+                                                </React.Fragment>
+                                            );
+                                        }
+                                        const item = entry.item;
+                                        return (
+                                            <React.Fragment key={item.id}>
+                                                {dropTarget?.column === cat.key && dropTarget?.overId === item.id && !dropTarget?.isGroup && dropTarget?.before && (
+                                                    <div className="vault-drop-indicator" />
+                                                )}
+                                                <FeedbackCard
+                                                    item={item}
+                                                    authorName={userName(item, 'author')}
+                                                    isVoted={!!userVotes[item.id]}
+                                                    onVote={() => toggleVote(item.id)}
+                                                    canVote={!!currentUserId}
+                                                    selected={selectedIds.has(item.id)}
+                                                    onClick={(e) => handleCardClick(e, item)}
+                                                    onContextMenu={(e) => handleCardContextMenu(e, item)}
+                                                    isDragging={dragging?.id === item.id}
+                                                    onDragStart={() => onDragStart({ type: 'feedback', id: item.id, category: item.category__c, fromGroupId: null })}
+                                                    onDragOver={(e) => onCardDragOver(e, cat.key, item.id)}
+                                                    onDragEnd={onDragEnd}
+                                                />
+                                                {dropTarget?.column === cat.key && dropTarget?.overId === item.id && !dropTarget?.isGroup && !dropTarget?.before && (
+                                                    <div className="vault-drop-indicator" />
+                                                )}
+                                            </React.Fragment>
+                                        );
+                                    })
                                 )}
                                 {dropTarget?.column === cat.key && !dropTarget?.overId && (
                                     <div className="vault-drop-indicator" />
@@ -462,7 +743,7 @@ export default function BoardView({ boardId, navigate, showToast }) {
                     );
                 })}
 
-                {/* Action Items as the 3rd column */}
+                {/* Action Items column */}
                 {(() => {
                     const isDragOver = dragging && dropTarget?.column === 'action';
                     const isValidTarget = dragging && isValidDrop('action');
@@ -506,7 +787,7 @@ export default function BoardView({ boardId, navigate, showToast }) {
                                                 onStatusChange={(s) => updateActionStatus(a.id, s)}
                                                 onAssigneeChange={(id, name) => updateActionAssignee(a.id, id, name)}
                                                 isDragging={dragging?.id === a.id}
-                                                onDragStart={() => onDragStart('action', a.id, 'action')}
+                                                onDragStart={() => onDragStart({ type: 'action', id: a.id })}
                                                 onDragOver={(e) => onCardDragOver(e, 'action', a.id)}
                                                 onDragEnd={onDragEnd}
                                             />
@@ -524,6 +805,21 @@ export default function BoardView({ boardId, navigate, showToast }) {
                     );
                 })()}
             </div>
+
+            {contextMenu && (
+                <ContextMenu x={contextMenu.x} y={contextMenu.y} onClose={closeContextMenu}>
+                    {contextMenu.kind === 'cards' && (
+                        <button className="vault-context-menu__item" onClick={groupSelectedItems}>
+                            Group ({contextMenu.ids.length})
+                        </button>
+                    )}
+                    {contextMenu.kind === 'group' && (
+                        <button className="vault-context-menu__item" onClick={() => ungroupItems(contextMenu.groupId)}>
+                            Ungroup
+                        </button>
+                    )}
+                </ContextMenu>
+            )}
 
             {/* Feedback Modal */}
             {fbModal && (() => {
@@ -631,6 +927,101 @@ export default function BoardView({ boardId, navigate, showToast }) {
     );
 }
 
+function GroupCard({
+    groupId, items, columnKey,
+    dragging, dropTarget,
+    userVotes, currentUserId, selectedIds,
+    onToggleVote, onCardClick, onCardContextMenu, onGroupContextMenu,
+    onCardDragStart, onGroupDragStart,
+    onCardDragOver, onGroupDragOver, onDragEnd
+}) {
+    const isDropHere = dropTarget?.overId === groupId && dropTarget?.isGroup;
+    const isJoinTarget = isDropHere && dropTarget?.intoGroup;
+    const isDraggingThis = dragging?.type === 'group' && dragging?.groupId === groupId;
+
+    return (
+        <div
+            className={
+                'vault-group-card' +
+                (isDraggingThis ? ' vault-group-card--dragging' : '') +
+                (isJoinTarget ? ' vault-group-card--join-target' : '')
+            }
+            onDragOver={(e) => onGroupDragOver(e, columnKey, groupId)}
+            onContextMenu={(e) => onGroupContextMenu(e, groupId)}
+        >
+            <div
+                className="vault-group-card__header"
+                draggable
+                onDragStart={onGroupDragStart}
+                onDragEnd={onDragEnd}
+                title="Drag to move group · Right-click to ungroup"
+            >
+                <span className="vault-group-card__handle">⠿</span>
+                <span className="vault-group-card__label">Group · {items.length}</span>
+            </div>
+            <div className="vault-group-card__items">
+                {items.map(item => (
+                    <React.Fragment key={item.id}>
+                        {dropTarget?.overId === item.id && !dropTarget?.isGroup && dropTarget?.before && (
+                            <div className="vault-drop-indicator" />
+                        )}
+                        <FeedbackCard
+                            item={item}
+                            authorName={item['author__cr.name__v'] || 'Unknown'}
+                            isVoted={!!userVotes[item.id]}
+                            onVote={() => onToggleVote(item.id)}
+                            canVote={!!currentUserId}
+                            selected={selectedIds.has(item.id)}
+                            onClick={(e) => onCardClick(e, item)}
+                            onContextMenu={(e) => onCardContextMenu(e, item)}
+                            isDragging={dragging?.id === item.id}
+                            onDragStart={() => onCardDragStart(item)}
+                            onDragOver={(e) => onCardDragOver(e, columnKey, item.id)}
+                            onDragEnd={onDragEnd}
+                        />
+                        {dropTarget?.overId === item.id && !dropTarget?.isGroup && !dropTarget?.before && (
+                            <div className="vault-drop-indicator" />
+                        )}
+                    </React.Fragment>
+                ))}
+            </div>
+        </div>
+    );
+}
+
+function ContextMenu({ x, y, children, onClose }) {
+    const ref = useRef(null);
+
+    useEffect(() => {
+        function onDocEvent(e) {
+            const path = e.composedPath ? e.composedPath() : [];
+            if (ref.current && !path.includes(ref.current)) {
+                onClose();
+            }
+        }
+        // Defer attaching listeners to avoid catching the triggering event
+        const t = setTimeout(() => {
+            document.addEventListener('mousedown', onDocEvent, true);
+            document.addEventListener('contextmenu', onDocEvent, true);
+        }, 0);
+        return () => {
+            clearTimeout(t);
+            document.removeEventListener('mousedown', onDocEvent, true);
+            document.removeEventListener('contextmenu', onDocEvent, true);
+        };
+    }, [onClose]);
+
+    return (
+        <div
+            ref={ref}
+            className="vault-context-menu"
+            style={{ top: y, left: x }}
+        >
+            {children}
+        </div>
+    );
+}
+
 function ActionCard({ item, ownerName, assigneeName, onStatusChange, onAssigneeChange, isDragging, onDragStart, onDragOver, onDragEnd }) {
     const [editingAssignee, setEditingAssignee] = useState(false);
 
@@ -691,17 +1082,22 @@ function ActionCard({ item, ownerName, assigneeName, onStatusChange, onAssigneeC
     );
 }
 
-function FeedbackCard({ item, authorName, isVoted, onVote, canVote, onEdit, isDragging, onDragStart, onDragOver, onDragEnd }) {
+function FeedbackCard({ item, authorName, isVoted, onVote, canVote, selected, onClick, onContextMenu, isDragging, onDragStart, onDragOver, onDragEnd }) {
     const voteCount = parseInt(item.vote_count__c || 0, 10);
     return (
         <div
-            className={'vault-feedback-card vault-feedback-card--clickable' + (isDragging ? ' vault-feedback-card--dragging' : '')}
+            className={
+                'vault-feedback-card vault-feedback-card--clickable' +
+                (isDragging ? ' vault-feedback-card--dragging' : '') +
+                (selected ? ' vault-feedback-card--selected' : '')
+            }
             draggable
-            onClick={onEdit}
+            onClick={onClick}
+            onContextMenu={onContextMenu}
             onDragStart={onDragStart}
             onDragOver={onDragOver}
             onDragEnd={onDragEnd}
-            title="Drag to reorder or move · Click to edit"
+            title="Drag to reorder or move · Click to edit · Cmd/Ctrl+click to select · Right-click to group"
         >
             <div className="vault-feedback-card__drag-handle">⠿</div>
             <div className="vault-feedback-card__content">{item.content__c}</div>
