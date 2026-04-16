@@ -23,6 +23,7 @@ export default function Insights({ showToast }) {
     const [boards, setBoards] = useState([]);
     const [teams, setTeams] = useState([]);
     const [hover, setHover] = useState(null);
+    const [hiddenTeams, setHiddenTeams] = useState(() => new Set());
 
     useEffect(() => {
         (async () => {
@@ -42,6 +43,30 @@ export default function Insights({ showToast }) {
 
     const chart = useMemo(() => buildChart(feedback, boards, teams), [feedback, boards, teams]);
 
+    function toggleTeam(teamId) {
+        setHiddenTeams(prev => {
+            const next = new Set(prev);
+            if (next.has(teamId)) next.delete(teamId);
+            else next.add(teamId);
+            return next;
+        });
+        // Hovering a now-hidden team's marker would leave a stale tooltip
+        setHover(null);
+    }
+
+    function isolateTeam(teamId) {
+        if (!chart) return;
+        const others = chart.teamMeta.map(t => t.id).filter(id => id !== teamId);
+        const allOthersHidden = others.every(id => hiddenTeams.has(id));
+        // Already isolated → restore all
+        setHiddenTeams(allOthersHidden && !hiddenTeams.has(teamId) ? new Set() : new Set(others));
+        setHover(null);
+    }
+
+    function showAll() {
+        setHiddenTeams(new Set());
+    }
+
     if (loading) return <Spinner />;
     if (!chart || chart.releases.length === 0) {
         return (
@@ -56,6 +81,8 @@ export default function Insights({ showToast }) {
         );
     }
 
+    const visibleSeries = chart.series.filter(s => !hiddenTeams.has(s.teamId));
+
     return (
         <>
             <Header />
@@ -65,11 +92,17 @@ export default function Insights({ showToast }) {
                 </div>
                 <div className="vault-card__body">
                     <p className="vault-text-small vault-text-muted vault-mb-16">
-                        For each release × team, sentiment = vote-weighted Went Well share of the total Went Well + To Improve. Higher means a happier retro.
+                        For each release × team, sentiment = vote-weighted Went Well share of the total Went Well + To Improve. Higher means a happier retro. Click a team to hide it; double-click to isolate.
                     </p>
-                    <Legend teams={chart.teamMeta} />
-                    <SentimentChart chart={chart} hover={hover} setHover={setHover} />
-                    <SentimentTable chart={chart} />
+                    <Legend
+                        teams={chart.teamMeta}
+                        hiddenTeams={hiddenTeams}
+                        onToggle={toggleTeam}
+                        onIsolate={isolateTeam}
+                        onShowAll={showAll}
+                    />
+                    <SentimentChart chart={{ ...chart, series: visibleSeries }} hover={hover} setHover={setHover} />
+                    <SentimentTable chart={{ ...chart, series: visibleSeries }} />
                 </div>
             </div>
         </>
@@ -116,8 +149,9 @@ function buildChart(feedback, boards, teams) {
 
     if (buckets.size === 0) return null;
 
-    // Releases sorted Z→A (descending alphabetical = newest first for the YYRX.X scheme)
-    const releases = [...new Set([...buckets.keys()].map(k => k.split('|')[0]))].sort().reverse();
+    // Releases sorted A→Z (ascending alphabetical = oldest first for the YYRX.X scheme,
+    // i.e. standard left-to-right timeline orientation)
+    const releases = [...new Set([...buckets.keys()].map(k => k.split('|')[0]))].sort();
     // Team IDs that have at least one data point
     const teamIds = [...new Set([...buckets.keys()].map(k => k.split('|')[1]))];
 
@@ -161,15 +195,35 @@ function buildChart(feedback, boards, teams) {
 
 /* ---------- Render ---------- */
 
-function Legend({ teams }) {
+function Legend({ teams, hiddenTeams, onToggle, onIsolate, onShowAll }) {
+    const anyHidden = hiddenTeams && hiddenTeams.size > 0;
     return (
         <div className="vault-chart-legend">
-            {teams.map(t => (
-                <span key={t.id} className="vault-chart-legend__item">
-                    <span className="vault-chart-legend__swatch" style={{ background: t.color }} />
-                    {t.name}
-                </span>
-            ))}
+            {teams.map(t => {
+                const hidden = hiddenTeams && hiddenTeams.has(t.id);
+                return (
+                    <button
+                        key={t.id}
+                        type="button"
+                        className={'vault-chart-legend__item vault-chart-legend__item--clickable' + (hidden ? ' vault-chart-legend__item--hidden' : '')}
+                        onClick={() => onToggle(t.id)}
+                        onDoubleClick={() => onIsolate(t.id)}
+                        title={hidden ? `Show ${t.name}` : `Hide ${t.name} (double-click to isolate)`}
+                    >
+                        <span className="vault-chart-legend__swatch" style={{ background: hidden ? 'var(--vault-gray-300)' : t.color }} />
+                        {t.name}
+                    </button>
+                );
+            })}
+            {anyHidden && (
+                <button
+                    type="button"
+                    className="vault-chart-legend__reset"
+                    onClick={onShowAll}
+                >
+                    Show all
+                </button>
+            )}
         </div>
     );
 }

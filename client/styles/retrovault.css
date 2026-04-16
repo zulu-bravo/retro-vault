@@ -1082,6 +1082,42 @@
     gap: 6px;
 }
 
+.vault-chart-legend__item--clickable {
+    cursor: pointer;
+    background: transparent;
+    border: 1px solid transparent;
+    color: var(--vault-text-primary);
+    font: inherit;
+    padding: 2px 8px;
+    border-radius: var(--vault-radius);
+    user-select: none;
+    transition: background-color 0.12s ease, border-color 0.12s ease, opacity 0.12s ease;
+}
+
+.vault-chart-legend__item--clickable:hover {
+    background: var(--vault-silver-light);
+    border-color: var(--vault-silver-default);
+}
+
+.vault-chart-legend__item--hidden {
+    opacity: 0.5;
+    text-decoration: line-through;
+}
+
+.vault-chart-legend__reset {
+    cursor: pointer;
+    background: transparent;
+    border: 0;
+    font: inherit;
+    color: var(--vault-primary);
+    padding: 2px 8px;
+    border-radius: var(--vault-radius);
+}
+
+.vault-chart-legend__reset:hover {
+    text-decoration: underline;
+}
+
 .vault-chart-legend__swatch {
     display: inline-block;
     width: 12px;
