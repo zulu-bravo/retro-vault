@@ -14,16 +14,14 @@ RetroVault is a team retrospective feedback application built as a **Veeva Vault
 - **Server**: Java `PageController` using the Vault Java SDK (`server/` folder)
 - **Design**: Vault CRM Web design system tokens; CSS in `client/styles/retrovault.css`. Tokens sourced from the Vault CRM (Web) Figma file via the Figma Dev Mode MCP. Primary blue is `#1453b8`, font is Roboto 12px base.
 
-Working branch: `insights-release-sentiment` (active). `main` is the integration branch.
+Repo: `zulu-bravo/retro-vault` on GitHub. Multiple collaborators work on different branches at the same time — check `git branch -a` and `git log origin/main` for current state. **Do not record a "current" or "active" branch in this file** — it'll go stale immediately.
 
-Repo: `zulu-bravo/retro-vault` on GitHub.
-
-## Branches in flight
+## Notable branches and what they contribute
 
 - `main` — integration branch. Merged features so far: Vault CRM design reskin, 3-column board, retro_ object prefix, drag/drop, action assignees, card grouping, group renaming, action item refinements, dashboard open-action count, refresh button, kudos column, two-tab native Vault split (Boards / Insights).
-- `kudos-board` — Kudos column. Merged into main; tweaks (column order, no gold card highlight) pushed.
+- `kudos-board` — Kudos column. Merged into main; some follow-up tweaks (column-order swap, gold card highlight removal) pushed.
 - `feature-insights-tab` — Two-tab Vault split (Boards + Insights as separate native Vault tabs). Merged into main as `004232a`.
-- `insights-release-sentiment` — current branch. Removes the old three-panel Insights and replaces it with a single multi-line release-sentiment chart (one line per team, X-axis = releases Z→A, Y-axis = vote-weighted Went Well share).
+- `insights-release-sentiment` — Replaces the old three-panel Insights with a single multi-line release-sentiment chart. X-axis = releases A→Z (oldest left, newest right), Y-axis = vote-weighted Went Well share, with subtle green/red sentiment zones above 75% / below 25%, clickable legend (click to hide a team, double-click to isolate, "Show all" reset), and per-cell ▲/▼ counts in the companion table.
 
 ## Deployment status
 
