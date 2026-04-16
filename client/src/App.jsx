@@ -1,11 +1,11 @@
-// App.jsx - Root component with simple state-based routing
+// App.jsx - Boards-side root.
+// The Insights view lives in its own Vault Page (see App_Insights.jsx + the
+// retrovault_insights__c Page MDL component). No inner navigation bar.
 import React, { useState, useCallback } from 'react';
 
-import NavBar from './components/NavBar';
 import Toast from './components/Toast';
 import Dashboard from './pages/Dashboard';
 import BoardView from './pages/BoardView';
-import Insights from './pages/Insights';
 import CreateBoard from './pages/CreateBoard';
 import SeedData from './pages/SeedData';
 
@@ -29,9 +29,6 @@ export default function App() {
         case 'board':
             content = <BoardView boardId={view.boardId} navigate={navigate} showToast={showToast} />;
             break;
-        case 'insights':
-            content = <Insights navigate={navigate} showToast={showToast} />;
-            break;
         case 'create-board':
             content = <CreateBoard boardId={view.boardId} navigate={navigate} showToast={showToast} />;
             break;
@@ -44,7 +41,6 @@ export default function App() {
 
     return (
         <div className="vault-app">
-            <NavBar activePage={view.name} navigate={navigate} />
             <div className="vault-page">
                 <div className="vault-container">
                     {content}
