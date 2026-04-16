@@ -97,3 +97,15 @@ ALTER Object retro_feedback__c (
         list_column(false)
     )
 );
+
+ALTER Object retro_feedback__c (
+    add Field kudos_recipient__c (
+        label('Kudos Recipient'),
+        type('ObjectReference'),
+        object('user__sys'),
+        relationship_type('reference'),
+        active(true),
+        required(false),
+        list_column(false)
+    )
+);

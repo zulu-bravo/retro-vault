@@ -18,8 +18,11 @@ import { formatDate, formatDateTime } from '../utils/format';
 
 const CATEGORIES = [
     { key: 'went_well__c', label: 'Went Well', color: 'green' },
-    { key: 'didnt_go_well__c', label: 'To Improve', color: 'red' }
+    { key: 'didnt_go_well__c', label: 'To Improve', color: 'red' },
+    { key: 'kudos__c', label: 'Kudos', color: 'gold' }
 ];
+
+const KUDOS_CATEGORY = 'kudos__c';
 
 const THEMES = [
     { name: 'tooling__c', label: 'Tooling' },
@@ -68,6 +71,8 @@ export default function BoardView({ boardId, navigate, showToast }) {
     const [fbContent, setFbContent] = useState('');
     const [fbTheme, setFbTheme] = useState('');
     const [fbFeature, setFbFeature] = useState('');
+    const [fbRecipientId, setFbRecipientId] = useState('');
+    const [fbRecipientName, setFbRecipientName] = useState('');
 
     const [aiModal, setAiModal] = useState(false);
     const [aiTitle, setAiTitle] = useState('');
@@ -180,6 +185,8 @@ export default function BoardView({ boardId, navigate, showToast }) {
         setFbContent(item.content__c || '');
         setFbTheme(item.theme__c || '');
         setFbFeature(item.feature__c || '');
+        setFbRecipientId(item.kudos_recipient__c || '');
+        setFbRecipientName(userName(item, 'kudos_recipient') === 'Unknown' ? '' : userName(item, 'kudos_recipient'));
     }
 
     function resetFbModal() {
@@ -187,11 +194,18 @@ export default function BoardView({ boardId, navigate, showToast }) {
         setFbContent('');
         setFbTheme('');
         setFbFeature('');
+        setFbRecipientId('');
+        setFbRecipientName('');
     }
 
     async function submitFeedback() {
+        const isKudos = fbModal.category === KUDOS_CATEGORY;
         if (!fbContent.trim()) {
-            showToast('Please enter feedback content.', 'error');
+            showToast(isKudos ? 'Please describe what they did.' : 'Please enter feedback content.', 'error');
+            return;
+        }
+        if (isKudos && !fbRecipientId) {
+            showToast('Please pick a recipient for the kudos.', 'error');
             return;
         }
         const isEdit = !!fbModal.id;
@@ -203,11 +217,20 @@ export default function BoardView({ boardId, navigate, showToast }) {
                     theme__c: fbTheme || null,
                     feature__c: fbFeature || null
                 };
+                if (isKudos) {
+                    updates.kudos_recipient__c = fbRecipientId || null;
+                }
                 await update('retro_feedback__c', fbModal.id, updates);
                 setFeedback(prev => prev.map(fi =>
-                    fi.id === fbModal.id ? { ...fi, ...updates } : fi
+                    fi.id === fbModal.id
+                        ? {
+                            ...fi,
+                            ...updates,
+                            ...(isKudos ? { 'kudos_recipient__cr.name__v': fbRecipientName || null } : {})
+                        }
+                        : fi
                 ));
-                showToast('Feedback updated!', 'success');
+                showToast(isKudos ? 'Kudos updated!' : 'Feedback updated!', 'success');
             } else {
                 const fields = {
                     name__v: fbContent.substring(0, 80),
@@ -219,14 +242,17 @@ export default function BoardView({ boardId, navigate, showToast }) {
                 };
                 if (fbTheme) fields.theme__c = fbTheme;
                 if (fbFeature) fields.feature__c = fbFeature;
+                if (isKudos && fbRecipientId) fields.kudos_recipient__c = fbRecipientId;
 
                 const newId = await create('retro_feedback__c', fields);
-                setFeedback(prev => [...prev, { id: newId, ...fields }]);
-                showToast('Feedback added!', 'success');
+                const newRow = { id: newId, ...fields };
+                if (isKudos) newRow['kudos_recipient__cr.name__v'] = fbRecipientName || null;
+                setFeedback(prev => [...prev, newRow]);
+                showToast(isKudos ? 'Kudos added! 🎉' : 'Feedback added!', 'success');
             }
             resetFbModal();
         } catch (err) {
-            showToast(`Failed to ${isEdit ? 'update' : 'add'} feedback: ${err.message}`, 'error');
+            showToast(`Failed to ${isEdit ? 'update' : 'add'} ${isKudos ? 'kudos' : 'feedback'}: ${err.message}`, 'error');
         }
     }
 
@@ -395,6 +421,18 @@ export default function BoardView({ boardId, navigate, showToast }) {
         if (!drag) return false;
         if (columnKey === 'action' && (drag.type === 'feedback' || drag.type === 'group')) return false;
         if (columnKey !== 'action' && drag.type === 'action') return false;
+        // Kudos column accepts only kudos cards (and groups of kudos);
+        // kudos cards/groups can't drop into Went Well / To Improve.
+        if (drag.type === 'feedback') {
+            const draggedIsKudos = drag.category === KUDOS_CATEGORY;
+            const targetIsKudos = columnKey === KUDOS_CATEGORY;
+            if (draggedIsKudos !== targetIsKudos) return false;
+        }
+        if (drag.type === 'group') {
+            const draggedIsKudos = drag.category === KUDOS_CATEGORY;
+            const targetIsKudos = columnKey === KUDOS_CATEGORY;
+            if (draggedIsKudos !== targetIsKudos) return false;
+        }
         return true;
     }
 
@@ -663,9 +701,11 @@ export default function BoardView({ boardId, navigate, showToast }) {
                                             setFbContent('');
                                             setFbTheme('');
                                             setFbFeature('');
+                                            setFbRecipientId('');
+                                            setFbRecipientName('');
                                         }}
                                     >
-                                        + Add
+                                        {cat.key === KUDOS_CATEGORY ? '+ Kudos' : '+ Add'}
                                     </button>
                                 )}
                                 {entries.length === 0 && !isDragOver ? (
@@ -827,19 +867,41 @@ export default function BoardView({ boardId, navigate, showToast }) {
                     .split('\n')
                     .map(s => s.trim())
                     .filter(Boolean);
+                const isKudos = fbModal.category === KUDOS_CATEGORY;
+                const titleLabel = isKudos
+                    ? (fbModal.id ? 'Edit Kudos' : 'Give Kudos 🎉')
+                    : (fbModal.id ? 'Edit Feedback' : 'Add Feedback');
+                const confirmLabel = isKudos
+                    ? (fbModal.id ? 'Save Changes' : 'Send Kudos')
+                    : (fbModal.id ? 'Save Changes' : 'Add Feedback');
                 return (
                     <Modal
-                        title={fbModal.id ? 'Edit Feedback' : 'Add Feedback'}
-                        confirmLabel={fbModal.id ? 'Save Changes' : 'Add Feedback'}
+                        title={titleLabel}
+                        confirmLabel={confirmLabel}
                         onClose={resetFbModal}
                         onConfirm={submitFeedback}
                     >
                         <div className="vault-form">
+                            {isKudos && (
+                                <div className="vault-form-group">
+                                    <label className="vault-label">To *</label>
+                                    <UserTypeAhead
+                                        value={fbRecipientId}
+                                        displayName={fbRecipientName}
+                                        onChange={(id, name) => {
+                                            setFbRecipientId(id || '');
+                                            setFbRecipientName(name || '');
+                                        }}
+                                        placeholder="Search teammates..."
+                                        autoFocus
+                                    />
+                                </div>
+                            )}
                             <div className="vault-form-group">
-                                <label className="vault-label">Feedback *</label>
+                                <label className="vault-label">{isKudos ? 'Why *' : 'Feedback *'}</label>
                                 <textarea
                                     className="vault-textarea"
-                                    placeholder="Share your feedback..."
+                                    placeholder={isKudos ? 'What did they do that made the difference?' : 'Share your feedback...'}
                                     value={fbContent}
                                     onChange={(e) => setFbContent(e.target.value)}
                                     rows={3}
@@ -860,15 +922,17 @@ export default function BoardView({ boardId, navigate, showToast }) {
                                     </div>
                                 )}
                             </div>
-                            <div className="vault-form-group">
-                                <label className="vault-label">Theme</label>
-                                <select className="vault-select" value={fbTheme} onChange={(e) => setFbTheme(e.target.value)}>
-                                    <option value="">None</option>
-                                    {THEMES.map(t => (
-                                        <option key={t.name} value={t.name}>{t.label}</option>
-                                    ))}
-                                </select>
-                            </div>
+                            {!isKudos && (
+                                <div className="vault-form-group">
+                                    <label className="vault-label">Theme</label>
+                                    <select className="vault-select" value={fbTheme} onChange={(e) => setFbTheme(e.target.value)}>
+                                        <option value="">None</option>
+                                        {THEMES.map(t => (
+                                            <option key={t.name} value={t.name}>{t.label}</option>
+                                        ))}
+                                    </select>
+                                </div>
+                            )}
                         </div>
                     </Modal>
                 );
@@ -1084,10 +1148,15 @@ function ActionCard({ item, ownerName, assigneeName, onStatusChange, onAssigneeC
 
 function FeedbackCard({ item, authorName, isVoted, onVote, canVote, selected, onClick, onContextMenu, isDragging, onDragStart, onDragOver, onDragEnd }) {
     const voteCount = parseInt(item.vote_count__c || 0, 10);
+    const isKudos = item.category__c === 'kudos__c';
+    const recipientName = isKudos
+        ? (item['kudos_recipient__cr.name__v'] || 'Someone')
+        : null;
     return (
         <div
             className={
                 'vault-feedback-card vault-feedback-card--clickable' +
+                (isKudos ? ' vault-feedback-card--kudos' : '') +
                 (isDragging ? ' vault-feedback-card--dragging' : '') +
                 (selected ? ' vault-feedback-card--selected' : '')
             }
@@ -1100,12 +1169,19 @@ function FeedbackCard({ item, authorName, isVoted, onVote, canVote, selected, on
             title="Drag to reorder or move · Click to edit · Cmd/Ctrl+click to select · Right-click to group"
         >
             <div className="vault-feedback-card__drag-handle">⠿</div>
+            {isKudos && (
+                <div className="vault-feedback-card__recipient">
+                    🎉 Kudos to <strong>{recipientName}</strong>
+                </div>
+            )}
             <div className="vault-feedback-card__content">{item.content__c}</div>
             {item.feature__c && (
                 <div className="vault-feedback-card__feature">{item.feature__c}</div>
             )}
             <div className="vault-feedback-card__footer">
-                <span className="vault-feedback-card__author">{authorName}</span>
+                <span className="vault-feedback-card__author">
+                    {isKudos ? `from ${authorName}` : authorName}
+                </span>
                 <div className="vault-feedback-card__actions">
                     {item.theme__c && <ThemeBadge theme={item.theme__c} />}
                     {canVote ? (
