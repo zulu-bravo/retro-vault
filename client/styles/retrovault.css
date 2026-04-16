@@ -991,6 +991,68 @@
 .seed-log__line.info { color: var(--vault-primary); }
 .seed-log__line.success { color: var(--vault-success); }
 
+/* Type-ahead user search */
+.vault-typeahead {
+    position: relative;
+}
+
+.vault-typeahead__dropdown {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    background: var(--vault-surface);
+    border: 1px solid var(--vault-border);
+    border-radius: var(--vault-radius);
+    box-shadow: var(--vault-shadow-hover);
+    z-index: 1000;
+    max-height: 200px;
+    overflow-y: auto;
+}
+
+.vault-typeahead__option {
+    padding: 8px var(--vault-space-3);
+    font-size: var(--vault-font-size-sm);
+    color: var(--vault-text-primary);
+    cursor: pointer;
+    border-bottom: 1px solid var(--vault-border-subtle);
+}
+
+.vault-typeahead__option:last-child {
+    border-bottom: none;
+}
+
+.vault-typeahead__option:hover {
+    background: var(--vault-primary-subtle);
+    color: var(--vault-primary);
+}
+
+/* Assignee field on ActionCard */
+.vault-action-card__assignee-row {
+    margin-top: var(--vault-space-1);
+}
+
+.vault-assignee-btn {
+    display: inline-flex;
+    align-items: center;
+    padding: 2px var(--vault-space-2);
+    border: 1px dashed var(--vault-border-strong);
+    border-radius: var(--vault-radius-pill);
+    background: transparent;
+    color: var(--vault-text-secondary);
+    font-size: var(--vault-font-size-sm);
+    font-family: inherit;
+    cursor: pointer;
+    transition: all 0.15s ease;
+}
+
+.vault-assignee-btn:hover {
+    border-color: var(--vault-primary);
+    color: var(--vault-primary);
+    background: var(--vault-primary-subtle);
+    border-style: solid;
+}
+
 /* Drag and drop */
 .vault-feedback-card--dragging,
 .vault-action-card--dragging {

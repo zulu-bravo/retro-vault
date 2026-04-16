@@ -13,6 +13,7 @@ import {
 import Spinner, { EmptyState } from '../components/Spinner';
 import { StatusBadge, ThemeBadge } from '../components/Badge';
 import Modal from '../components/Modal';
+import UserTypeAhead from '../components/UserTypeAhead';
 import { formatDate, formatDateTime } from '../utils/format';
 
 const CATEGORIES = [
@@ -48,6 +49,8 @@ export default function BoardView({ boardId, navigate, showToast }) {
     const [aiModal, setAiModal] = useState(false);
     const [aiTitle, setAiTitle] = useState('');
     const [aiDue, setAiDue] = useState('');
+    const [aiAssigneeId, setAiAssigneeId] = useState('');
+    const [aiAssigneeName, setAiAssigneeName] = useState('');
 
     // Drag and drop state
     const dragRef = useRef(null); // { type: 'feedback'|'action', id, category }
@@ -208,12 +211,19 @@ export default function BoardView({ boardId, navigate, showToast }) {
                 status__c: 'open__c'
             };
             if (aiDue) fields.due_date__c = aiDue;
+            if (aiAssigneeId) fields.assignee__c = aiAssigneeId;
 
             const newId = await create('retro_action__c', fields);
-            setActions(prev => [...prev, { id: newId, ...fields }]);
+            setActions(prev => [...prev, {
+                id: newId,
+                ...fields,
+                'assignee__cr.name__v': aiAssigneeName || null
+            }]);
             setAiModal(false);
             setAiTitle('');
             setAiDue('');
+            setAiAssigneeId('');
+            setAiAssigneeName('');
             showToast('Action item added!', 'success');
         } catch (err) {
             showToast('Failed to add action item: ' + err.message, 'error');
@@ -232,6 +242,19 @@ export default function BoardView({ boardId, navigate, showToast }) {
             ));
         } catch (err) {
             showToast('Failed to update status: ' + err.message, 'error');
+        }
+    }
+
+    async function updateActionAssignee(actionId, assigneeId, assigneeName) {
+        try {
+            await update('retro_action__c', actionId, { assignee__c: assigneeId || null });
+            setActions(prev => prev.map(a =>
+                a.id === actionId
+                    ? { ...a, assignee__c: assigneeId || null, 'assignee__cr.name__v': assigneeName || null }
+                    : a
+            ));
+        } catch (err) {
+            showToast('Failed to update assignee: ' + err.message, 'error');
         }
     }
 
@@ -366,9 +389,6 @@ export default function BoardView({ boardId, navigate, showToast }) {
                     <button className="vault-btn vault-btn--secondary" onClick={() => navigate('create-board', { boardId })}>
                         Board Settings
                     </button>
-                    <button className="vault-btn vault-btn--secondary" onClick={() => navigate('dashboard')}>
-                        ← Back
-                    </button>
                 </div>
             </div>
 
@@ -482,7 +502,9 @@ export default function BoardView({ boardId, navigate, showToast }) {
                                             <ActionCard
                                                 item={a}
                                                 ownerName={userName(a, 'owner')}
+                                                assigneeName={a['assignee__cr.name__v'] || null}
                                                 onStatusChange={(s) => updateActionStatus(a.id, s)}
+                                                onAssigneeChange={(id, name) => updateActionAssignee(a.id, id, name)}
                                                 isDragging={dragging?.id === a.id}
                                                 onDragStart={() => onDragStart('action', a.id, 'action')}
                                                 onDragOver={(e) => onCardDragOver(e, 'action', a.id)}
@@ -561,7 +583,13 @@ export default function BoardView({ boardId, navigate, showToast }) {
                 <Modal
                     title="Add Action Item"
                     confirmLabel="Add Item"
-                    onClose={() => setAiModal(false)}
+                    onClose={() => {
+                        setAiModal(false);
+                        setAiTitle('');
+                        setAiDue('');
+                        setAiAssigneeId('');
+                        setAiAssigneeName('');
+                    }}
                     onConfirm={submitAction}
                 >
                     <div className="vault-form">
@@ -573,6 +601,18 @@ export default function BoardView({ boardId, navigate, showToast }) {
                                 placeholder="Action item title..."
                                 value={aiTitle}
                                 onChange={(e) => setAiTitle(e.target.value)}
+                            />
+                        </div>
+                        <div className="vault-form-group">
+                            <label className="vault-label">Assignee</label>
+                            <UserTypeAhead
+                                value={aiAssigneeId}
+                                displayName={aiAssigneeName}
+                                onChange={(id, name) => {
+                                    setAiAssigneeId(id || '');
+                                    setAiAssigneeName(name || '');
+                                }}
+                                placeholder="Search users..."
                             />
                         </div>
                         <div className="vault-form-group">
@@ -591,7 +631,9 @@ export default function BoardView({ boardId, navigate, showToast }) {
     );
 }
 
-function ActionCard({ item, ownerName, onStatusChange, isDragging, onDragStart, onDragOver, onDragEnd }) {
+function ActionCard({ item, ownerName, assigneeName, onStatusChange, onAssigneeChange, isDragging, onDragStart, onDragOver, onDragEnd }) {
+    const [editingAssignee, setEditingAssignee] = useState(false);
+
     return (
         <div
             className={'vault-action-card' + (isDragging ? ' vault-action-card--dragging' : '')}
@@ -606,6 +648,28 @@ function ActionCard({ item, ownerName, onStatusChange, isDragging, onDragStart, 
                 <span className="vault-action-card__owner">{ownerName}</span>
                 {item.due_date__c && (
                     <span className="vault-action-card__due">Due {formatDate(item.due_date__c)}</span>
+                )}
+            </div>
+            <div className="vault-action-card__assignee-row">
+                {editingAssignee ? (
+                    <UserTypeAhead
+                        value={item.assignee__c}
+                        displayName={assigneeName}
+                        onChange={(id, name) => {
+                            onAssigneeChange(id, name);
+                            setEditingAssignee(false);
+                        }}
+                        placeholder="Search users..."
+                        autoFocus
+                    />
+                ) : (
+                    <button
+                        className="vault-assignee-btn"
+                        onClick={(e) => { e.stopPropagation(); setEditingAssignee(true); }}
+                        title="Click to assign"
+                    >
+                        {assigneeName ? `→ ${assigneeName}` : '+ Assign'}
+                    </button>
                 )}
             </div>
             <select

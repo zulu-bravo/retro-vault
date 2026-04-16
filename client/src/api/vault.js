@@ -161,9 +161,53 @@ export async function fetchFeedbackForBoard(boardId) {
 export async function fetchActionsForBoard(boardId) {
     return query(
         "SELECT id, name__v, retro_board__c, owner__c, owner__cr.name__v, " +
+        "assignee__c, assignee__cr.name__v, " +
         "status__c, due_date__c, completed_at__c FROM retro_action__c " +
         `WHERE retro_board__c = '${escapeVql(boardId)}'`
     );
+}
+
+/**
+ * Search users by name (type-ahead). Uses the Vault REST Query API directly
+ * via vaultApiClient to avoid the SDK restriction on user__sys VQL queries.
+ * @param {string} term - search string (min 2 chars)
+ * @returns {Promise<Array<{id: string, name: string}>>}
+ */
+// Cached user list — loaded once on first search, reused for subsequent keystrokes
+let _usersCache = null;
+
+async function loadAllUsers() {
+    if (_usersCache) return _usersCache;
+    const resp = await vaultApiClient.fetch('/v25.1/objects/users', {
+        headers: { Accept: 'application/json' }
+    });
+    const json = await resp.json();
+    _usersCache = (json.users || []).map(entry => {
+        const u = entry.user;
+        const name = [u.user_first_name__v, u.user_last_name__v].filter(Boolean).join(' ').trim()
+            || u.user_name__v
+            || '';
+        return { id: String(u.id), name };
+    });
+    return _usersCache;
+}
+
+/**
+ * Search users by name (type-ahead). Loads all users once and filters
+ * client-side using the same REST endpoint that loadCurrentUserName uses.
+ * @param {string} term - search string (min 2 chars)
+ * @returns {Promise<Array<{id: string, name: string}>>}
+ */
+export async function searchUsers(term) {
+    if (!term || term.trim().length < 2) return [];
+    const lower = term.trim().toLowerCase();
+    try {
+        const users = await loadAllUsers();
+        return users.filter(u => u.name.toLowerCase().includes(lower)).slice(0, 10);
+    } catch (err) {
+        console.warn('[RetroVault] User search failed:', err.message);
+        return [];
+    }
 }
 
 export async function fetchVotesForUser(userId) {
