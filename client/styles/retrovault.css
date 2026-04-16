@@ -341,6 +341,14 @@
     gap: var(--vault-space-1);
 }
 
+/* Open action count — warning-orange text line beneath the facilitator row,
+   shown on board cards that have one or more non-done action items. */
+.vault-board-card__open-actions {
+    font-size: var(--vault-font-size-md);
+    color: var(--vault-warning);
+    font-weight: var(--vault-font-weight-semibold);
+}
+
 /* Section */
 .vault-section { margin-bottom: var(--vault-space-8); }
 
