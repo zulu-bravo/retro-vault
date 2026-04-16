@@ -42,7 +42,7 @@ RECREATE Picklist action_status__c (
     label('Action Status'),
     active(true),
     Picklistentry open__c(
-        value('Open'),
+        value('Not Started'),
         order(0),
         active(true)
     ),
