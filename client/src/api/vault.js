@@ -152,7 +152,8 @@ export async function fetchBoard(boardId) {
 export async function fetchFeedbackForBoard(boardId) {
     return query(
         "SELECT id, name__v, retro_board__c, author__c, author__cr.name__v, " +
-        "category__c, content__c, theme__c, feature__c, vote_count__c, group__c " +
+        "category__c, content__c, theme__c, feature__c, vote_count__c, group__c, " +
+        "kudos_recipient__c, kudos_recipient__cr.name__v " +
         "FROM retro_feedback__c " +
         `WHERE retro_board__c = '${escapeVql(boardId)}'`
     );
@@ -224,7 +225,9 @@ export function userName(row, prefix) {
 
 export async function fetchAllFeedback() {
     return query(
-        "SELECT id, retro_board__c, category__c, theme__c, vote_count__c FROM retro_feedback__c"
+        "SELECT id, retro_board__c, category__c, theme__c, vote_count__c, " +
+        "kudos_recipient__c, kudos_recipient__cr.name__v " +
+        "FROM retro_feedback__c"
     );
 }
 

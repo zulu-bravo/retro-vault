@@ -22,6 +22,8 @@
     --vault-silver-default: #dadada;          /* [Figma] $silver-default — Secondary button border */
     --vault-silver-dark: #cccccc;             /* [Figma] $silver-dark — Input underline default */
     --vault-orange-default: #f8972b;          /* [Figma] $orange-default — Page Header bottom border */
+    --vault-gold-default: #d4a017;            /* RetroVault — Kudos column accent */
+    --vault-gold-subtle: #fff8e1;             /* RetroVault — Kudos card background tint */
     --vault-blue-link: #0066cc;               /* [Figma] blue/link — Breadcrumb links */
     --vault-black: #1d1d1d;                   /* [Figma] $black — Body text */
     --vault-white: #ffffff;                   /* [Figma] $white */
@@ -361,15 +363,19 @@
     .vault-grid--2, .vault-grid--3, .vault-grid--4 { grid-template-columns: 1fr; }
 }
 
-/* Feedback Columns — 3-column layout: Went Well | To Improve | Action Items */
+/* Feedback Columns — 4-column layout: Went Well | To Improve | Kudos | Action Items */
 .vault-columns {
     display: grid;
-    grid-template-columns: repeat(3, 1fr);
+    grid-template-columns: repeat(4, 1fr);
     gap: var(--vault-space-4);
     margin-bottom: var(--vault-space-8);
 }
 
-@media (max-width: 1024px) {
+@media (max-width: 1280px) {
+    .vault-columns { grid-template-columns: repeat(2, 1fr); }
+}
+
+@media (max-width: 768px) {
     .vault-columns { grid-template-columns: 1fr; }
 }
 
@@ -400,6 +406,7 @@
 .vault-column__header--green { background: var(--vault-success); }
 .vault-column__header--red { background: var(--vault-danger); }
 .vault-column__header--blue { background: var(--vault-primary); }
+.vault-column__header--gold { background: var(--vault-gold-default); }
 
 .vault-column__count {
     background: rgba(255, 255, 255, 0.3);
@@ -431,6 +438,29 @@
 .vault-feedback-card--clickable:hover {
     border-color: var(--vault-primary);
     box-shadow: 0 1px 3px var(--vault-focus-ring);
+}
+
+/* Kudos card — gold left border, subtle tinted bg, recipient line on top */
+.vault-feedback-card--kudos {
+    background: var(--vault-gold-subtle);
+    border-left: 4px solid var(--vault-gold-default);
+}
+
+.vault-feedback-card--kudos:hover {
+    border-color: var(--vault-gold-default);
+    border-left-color: var(--vault-gold-default);
+    box-shadow: 0 1px 3px rgba(212, 160, 23, 0.25);
+}
+
+.vault-feedback-card__recipient {
+    font-size: var(--vault-font-size-md);
+    color: var(--vault-text-primary);
+    margin-bottom: var(--vault-space-2);
+    line-height: 1.3;
+}
+
+.vault-feedback-card__recipient strong {
+    font-weight: var(--vault-font-weight-bold);
 }
 
 .vault-feedback-card__feature {

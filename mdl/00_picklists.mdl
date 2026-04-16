@@ -15,6 +15,11 @@ RECREATE Picklist feedback_category__c (
         value('Ideas'),
         order(2),
         active(true)
+    ),
+    Picklistentry kudos__c(
+        value('Kudos'),
+        order(3),
+        active(true)
     )
 );
 
