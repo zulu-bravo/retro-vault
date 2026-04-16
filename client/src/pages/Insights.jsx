@@ -418,9 +418,24 @@ function SentimentTable({ chart }) {
                         <td className="vault-text-bold">
                             <span className="vault-chart-legend__swatch" style={{ background: s.color }} /> {s.teamName}
                         </td>
-                        {s.points.map(p => (
-                            <td key={p.release}>{p.sentiment === null ? '—' : `${p.sentiment}%`}</td>
-                        ))}
+                        {s.points.map(p => {
+                            if (p.sentiment === null) {
+                                return <td key={p.release}>—</td>;
+                            }
+                            const wwCount = p.wwCount || 0;
+                            const tiCount = (p.totalCount || 0) - wwCount;
+                            return (
+                                <td key={p.release}>
+                                    <div className="vault-chart-cell">
+                                        <div className="vault-chart-cell__pct">{p.sentiment}%</div>
+                                        <div className="vault-chart-cell__counts">
+                                            <span className="vault-chart-cell__pos" title="Went Well items">▲ {wwCount}</span>
+                                            <span className="vault-chart-cell__neg" title="To Improve items">▼ {tiCount}</span>
+                                        </div>
+                                    </div>
+                                </td>
+                            );
+                        })}
                     </tr>
                 ))}
             </tbody>

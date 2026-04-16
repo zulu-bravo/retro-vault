@@ -1132,6 +1132,35 @@
     vertical-align: middle;
 }
 
+/* Sentiment table cell — percentage on top, ▲/▼ counts on a small line below */
+.vault-chart-cell {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    align-items: flex-start;
+    line-height: 1.3;
+}
+
+.vault-chart-cell__pct {
+    font-weight: var(--vault-font-weight-bold);
+}
+
+.vault-chart-cell__counts {
+    display: inline-flex;
+    gap: var(--vault-space-2);
+    font-size: var(--vault-font-size-xs);
+}
+
+.vault-chart-cell__pos {
+    color: var(--vault-success);
+    font-weight: var(--vault-font-weight-medium);
+}
+
+.vault-chart-cell__neg {
+    color: var(--vault-danger);
+    font-weight: var(--vault-font-weight-medium);
+}
+
 /* Bar Chart */
 .vault-bar-chart { display: flex; flex-direction: column; gap: var(--vault-space-3); }
 
