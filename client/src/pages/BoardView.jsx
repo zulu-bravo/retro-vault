@@ -17,9 +17,9 @@ import UserTypeAhead from '../components/UserTypeAhead';
 import { formatDate, formatDateTime } from '../utils/format';
 
 const CATEGORIES = [
+    { key: 'kudos__c', label: 'Kudos', color: 'gold' },
     { key: 'went_well__c', label: 'Went Well', color: 'green' },
-    { key: 'didnt_go_well__c', label: 'To Improve', color: 'red' },
-    { key: 'kudos__c', label: 'Kudos', color: 'gold' }
+    { key: 'didnt_go_well__c', label: 'To Improve', color: 'red' }
 ];
 
 const KUDOS_CATEGORY = 'kudos__c';
