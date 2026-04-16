@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { fetchTeams, fetchBoard, create, update, getCurrentUserId, getCurrentUserName, userName } from '../api/vault';
 import Spinner from '../components/Spinner';
+import UserTypeAhead from '../components/UserTypeAhead';
 import { toISODate } from '../utils/format';
 
 export default function CreateBoard({ boardId, navigate, showToast }) {
@@ -88,7 +89,7 @@ export default function CreateBoard({ boardId, navigate, showToast }) {
         <div style={{ maxWidth: 640 }}>
             <div className="vault-page-header">
                 <div>
-                    <h1 className="vault-page-header__title">{isEdit ? 'Edit Board' : 'Create New Board'}</h1>
+                    <h1 className="vault-page-header__title">{isEdit ? 'Board Settings' : 'Create New Board'}</h1>
                     <p className="vault-page-header__subtitle">
                         {isEdit ? 'Update this retrospective board' : 'Set up a new retrospective session'}
                     </p>
@@ -121,13 +122,15 @@ export default function CreateBoard({ boardId, navigate, showToast }) {
                         </div>
 
                         <div className="vault-form-group">
-                            <label className="vault-label">Facilitator</label>
-                            <input
-                                className="vault-input"
-                                type="text"
-                                value={facilitatorDisplay}
-                                disabled
-                                title="Auto-assigned to the current user. Change via the Vault admin UI if needed."
+                            <label className="vault-label">Facilitator *</label>
+                            <UserTypeAhead
+                                value={facilitatorId}
+                                displayName={facilitatorDisplay}
+                                onChange={(id, name) => {
+                                    setFacilitatorId(id || '');
+                                    setFacilitatorDisplay(name || '');
+                                }}
+                                placeholder="Search users..."
                             />
                         </div>
 

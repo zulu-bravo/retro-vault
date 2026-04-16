@@ -14,7 +14,7 @@ import Spinner, { EmptyState } from '../components/Spinner';
 import { StatusBadge, ThemeBadge } from '../components/Badge';
 import Modal from '../components/Modal';
 import UserTypeAhead from '../components/UserTypeAhead';
-import { formatDate, formatDateTime } from '../utils/format';
+import { formatDate, formatDateMonthDay, toISODate } from '../utils/format';
 
 const CATEGORIES = [
     { key: 'kudos__c', label: 'Kudos', color: 'gold' },
@@ -85,11 +85,14 @@ export default function BoardView({ boardId, navigate, showToast }) {
     const [fbRecipientId, setFbRecipientId] = useState('');
     const [fbRecipientName, setFbRecipientName] = useState('');
 
-    const [aiModal, setAiModal] = useState(false);
+    // aiModal: null = closed, { id: null } = add, { id: <actionId> } = edit
+    const [aiModal, setAiModal] = useState(null);
     const [aiTitle, setAiTitle] = useState('');
     const [aiDue, setAiDue] = useState('');
     const [aiAssigneeId, setAiAssigneeId] = useState('');
     const [aiAssigneeName, setAiAssigneeName] = useState('');
+    const [aiStatus, setAiStatus] = useState('open__c');
+    const [aiOwnerName, setAiOwnerName] = useState('');
 
     // Multi-select for grouping (Cmd/Ctrl+click)
     const [selectedIds, setSelectedIds] = useState(() => new Set());
@@ -267,79 +270,94 @@ export default function BoardView({ boardId, navigate, showToast }) {
         }
     }
 
-    /* ---------- Add Action Item ---------- */
+    /* ---------- Add / Edit Action Item ---------- */
+
+    function openAddAction() {
+        setAiModal({ id: null });
+        setAiTitle('');
+        setAiDue('');
+        setAiAssigneeId('');
+        setAiAssigneeName('');
+        setAiStatus('open__c');
+        setAiOwnerName('');
+    }
+
+    function openEditAction(item) {
+        setAiModal({ id: item.id });
+        setAiTitle(item.name__v || '');
+        setAiDue(item.due_date__c ? String(item.due_date__c).slice(0, 10) : '');
+        setAiAssigneeId(item.assignee__c || '');
+        setAiAssigneeName(item['assignee__cr.name__v'] || '');
+        setAiStatus(item.status__c || 'open__c');
+        setAiOwnerName(userName(item, 'owner'));
+    }
+
+    function resetAiModal() {
+        setAiModal(null);
+        setAiTitle('');
+        setAiDue('');
+        setAiAssigneeId('');
+        setAiAssigneeName('');
+        setAiStatus('open__c');
+        setAiOwnerName('');
+    }
 
     async function submitAction() {
-        if (!aiTitle.trim()) {
+        const trimmedTitle = aiTitle.trim();
+        if (!trimmedTitle) {
             showToast('Please enter a title.', 'error');
             return;
         }
+        const isEdit = !!(aiModal && aiModal.id);
         try {
-            const fields = {
-                name__v: aiTitle,
-                retro_board__c: boardId,
-                owner__c: currentUserId,
-                status__c: 'open__c'
-            };
-            if (aiDue) fields.due_date__c = aiDue;
-            if (aiAssigneeId) fields.assignee__c = aiAssigneeId;
+            if (isEdit) {
+                const existing = actions.find(a => a.id === aiModal.id);
+                const updates = {
+                    name__v: trimmedTitle,
+                    due_date__c: aiDue || null,
+                    assignee__c: aiAssigneeId || null,
+                    status__c: aiStatus
+                };
+                // Stamp completion time when first moving to Done; leave it
+                // alone if already Done (don't overwrite the original timestamp).
+                if (aiStatus === 'done__c' && existing?.status__c !== 'done__c') {
+                    updates.completed_at__c = new Date().toISOString();
+                }
+                await update('retro_action__c', aiModal.id, updates);
+                setActions(prev => prev.map(a =>
+                    a.id === aiModal.id
+                        ? { ...a, ...updates, 'assignee__cr.name__v': aiAssigneeName || null }
+                        : a
+                ));
+                showToast('Action item updated!', 'success');
+            } else {
+                const fields = {
+                    name__v: trimmedTitle,
+                    retro_board__c: boardId,
+                    owner__c: currentUserId,
+                    status__c: 'open__c'
+                };
+                if (aiDue) fields.due_date__c = aiDue;
+                if (aiAssigneeId) fields.assignee__c = aiAssigneeId;
 
-            const newId = await create('retro_action__c', fields);
-            setActions(prev => [...prev, {
-                id: newId,
-                ...fields,
-                'assignee__cr.name__v': aiAssigneeName || null
-            }]);
-            setAiModal(false);
-            setAiTitle('');
-            setAiDue('');
-            setAiAssigneeId('');
-            setAiAssigneeName('');
-            showToast('Action item added!', 'success');
-        } catch (err) {
-            showToast('Failed to add action item: ' + err.message, 'error');
-        }
-    }
-
-    async function updateActionStatus(actionId, newStatus) {
-        try {
-            const fields = { status__c: newStatus };
-            if (newStatus === 'done__c') {
-                fields.completed_at__c = new Date().toISOString();
+                const newId = await create('retro_action__c', fields);
+                setActions(prev => [...prev, {
+                    id: newId,
+                    ...fields,
+                    'assignee__cr.name__v': aiAssigneeName || null
+                }]);
+                showToast('Action item added!', 'success');
             }
-            await update('retro_action__c', actionId, fields);
-            setActions(prev => prev.map(a =>
-                a.id === actionId ? { ...a, ...fields } : a
-            ));
+            resetAiModal();
         } catch (err) {
-            showToast('Failed to update status: ' + err.message, 'error');
+            showToast(`Failed to ${isEdit ? 'update' : 'add'} action item: ${err.message}`, 'error');
         }
     }
 
-    async function updateActionAssignee(actionId, assigneeId, assigneeName) {
-        try {
-            await update('retro_action__c', actionId, { assignee__c: assigneeId || null });
-            setActions(prev => prev.map(a =>
-                a.id === actionId
-                    ? { ...a, assignee__c: assigneeId || null, 'assignee__cr.name__v': assigneeName || null }
-                    : a
-            ));
-        } catch (err) {
-            showToast('Failed to update assignee: ' + err.message, 'error');
-        }
-    }
-
-    async function updateActionTitle(actionId, newTitle) {
-        const trimmed = (newTitle || '').trim();
-        if (!trimmed) return;
-        try {
-            await update('retro_action__c', actionId, { name__v: trimmed });
-            setActions(prev => prev.map(a =>
-                a.id === actionId ? { ...a, name__v: trimmed } : a
-            ));
-        } catch (err) {
-            showToast('Failed to update title: ' + err.message, 'error');
-        }
+    function actionStatusLabel(status) {
+        if (status === 'done__c') return 'Done';
+        if (status === 'in_progress__c') return 'In Progress';
+        return 'Not Started';
     }
 
     /* ---------- Multi-select + Context Menu ---------- */
@@ -698,23 +716,18 @@ export default function BoardView({ boardId, navigate, showToast }) {
                         <h1 className="vault-page-header__title">{board.name__v}</h1>
                         <StatusBadge status={board.status__c} />
                     </div>
-                    <p className="vault-page-header__subtitle">
-                        {formatDate(board.board_date__c)}
-                        {board.release_tag__c && ` · ${board.release_tag__c}`}
-                        {` · Facilitator: ${userName(board, 'facilitator')}`}
-                    </p>
                 </div>
                 <div className="vault-flex vault-gap-8">
+                    <button className="vault-btn vault-btn--secondary" onClick={() => navigate('create-board', { boardId })}>
+                        Board Settings
+                    </button>
                     <button
-                        className="vault-action-btn"
+                        className="vault-btn vault-btn--secondary"
                         onClick={loadData}
                         title="Refresh"
                         aria-label="Refresh"
                     >
-                        ↻
-                    </button>
-                    <button className="vault-btn vault-btn--secondary" onClick={() => navigate('create-board', { boardId })}>
-                        Board Settings
+                        ↻ Refresh
                     </button>
                 </div>
             </div>
@@ -858,7 +871,7 @@ export default function BoardView({ boardId, navigate, showToast }) {
                                     <button
                                         className="vault-btn vault-btn--small vault-btn--secondary"
                                         style={{ width: '100%', marginBottom: 4 }}
-                                        onClick={() => setAiModal(true)}
+                                        onClick={openAddAction}
                                     >
                                         + Add
                                     </button>
@@ -873,11 +886,9 @@ export default function BoardView({ boardId, navigate, showToast }) {
                                             )}
                                             <ActionCard
                                                 item={a}
-                                                ownerName={userName(a, 'owner')}
                                                 assigneeName={a['assignee__cr.name__v'] || null}
-                                                onStatusChange={(s) => updateActionStatus(a.id, s)}
-                                                onAssigneeChange={(id, name) => updateActionAssignee(a.id, id, name)}
-                                                onTitleChange={(t) => updateActionTitle(a.id, t)}
+                                                statusLabel={actionStatusLabel(a.status__c)}
+                                                onClick={() => openEditAction(a)}
                                                 isDragging={dragging?.id === a.id}
                                                 onDragStart={() => onDragStart({ type: 'action', id: a.id })}
                                                 onDragOver={(e) => onCardDragOver(e, 'action', a.id)}
@@ -993,18 +1004,18 @@ export default function BoardView({ boardId, navigate, showToast }) {
             {/* Action Item Modal */}
             {aiModal && (
                 <Modal
-                    title="Add Action Item"
-                    confirmLabel="Add Item"
-                    onClose={() => {
-                        setAiModal(false);
-                        setAiTitle('');
-                        setAiDue('');
-                        setAiAssigneeId('');
-                        setAiAssigneeName('');
-                    }}
+                    title={aiModal.id ? 'Edit Action Item' : 'Add Action Item'}
+                    confirmLabel={aiModal.id ? 'Save Changes' : 'Add Item'}
+                    onClose={resetAiModal}
                     onConfirm={submitAction}
                 >
                     <div className="vault-form">
+                        {aiModal.id && (
+                            <div className="vault-form-group">
+                                <label className="vault-label">Created by</label>
+                                <div>{aiOwnerName || 'Unknown'}</div>
+                            </div>
+                        )}
                         <div className="vault-form-group">
                             <label className="vault-label">Title *</label>
                             <input
@@ -1036,6 +1047,20 @@ export default function BoardView({ boardId, navigate, showToast }) {
                                 onChange={(e) => setAiDue(e.target.value)}
                             />
                         </div>
+                        {aiModal.id && (
+                            <div className="vault-form-group">
+                                <label className="vault-label">Status</label>
+                                <select
+                                    className="vault-select"
+                                    value={aiStatus}
+                                    onChange={(e) => setAiStatus(e.target.value)}
+                                >
+                                    <option value="open__c">Not Started</option>
+                                    <option value="in_progress__c">In Progress</option>
+                                    <option value="done__c">Done</option>
+                                </select>
+                            </div>
+                        )}
                     </div>
                 </Modal>
             )}
@@ -1187,110 +1212,58 @@ function ContextMenu({ x, y, children, onClose }) {
     );
 }
 
-function ActionCard({ item, ownerName, assigneeName, onStatusChange, onAssigneeChange, onTitleChange, isDragging, onDragStart, onDragOver, onDragEnd }) {
-    const [editingAssignee, setEditingAssignee] = useState(false);
-    const [editingTitle, setEditingTitle] = useState(false);
-    const [draftTitle, setDraftTitle] = useState('');
-
-    function startTitleEdit(e) {
-        e.preventDefault();
-        e.stopPropagation();
-        setDraftTitle(item.name__v || '');
-        setEditingTitle(true);
-    }
-
-    function commitTitle() {
-        const trimmed = draftTitle.trim();
-        setEditingTitle(false);
-        if (trimmed && trimmed !== item.name__v) {
-            onTitleChange(trimmed);
-        }
-    }
-
+function ActionCard({ item, assigneeName, statusLabel, onClick, isDragging, onDragStart, onDragOver, onDragEnd }) {
     return (
         <div
-            className={'vault-action-card vault-action-card--' + (item.status__c || 'open__c').replace('__c', '') + (isDragging ? ' vault-action-card--dragging' : '')}
-            draggable={!editingTitle}
-            onDragStart={editingTitle ? undefined : onDragStart}
+            className={'vault-action-card vault-action-card--clickable' + (isDragging ? ' vault-action-card--dragging' : '')}
+            draggable
+            onClick={onClick}
+            onDragStart={onDragStart}
             onDragOver={onDragOver}
             onDragEnd={onDragEnd}
+            title="Click to edit"
         >
+            {(() => {
+                if (item.status__c === 'done__c') {
+                    return <span className="vault-action-card__status-dot vault-action-card__status-dot--done" title="Done">✓</span>;
+                }
+                // YYYY-MM-DD strings compare lexicographically as dates — avoids timezone drift
+                // from parsing the Vault-returned date as UTC midnight.
+                const dueYmd = item.due_date__c ? String(item.due_date__c).slice(0, 10) : '';
+                const todayYmd = toISODate(new Date());
+                if (dueYmd && dueYmd < todayYmd) {
+                    return (
+                        <span className="vault-action-card__status-dot vault-action-card__status-dot--overdue" title={`Overdue — due ${formatDate(item.due_date__c)}`}>
+                            <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true">
+                                <path d="M8 1 L15 14 L1 14 Z" />
+                                <rect x="7.25" y="5.5" width="1.5" height="4.5" rx="0.5" fill="#ffffff" />
+                                <rect x="7.25" y="11" width="1.5" height="1.5" rx="0.5" fill="#ffffff" />
+                            </svg>
+                        </span>
+                    );
+                }
+                return <span className="vault-action-card__status-dot vault-action-card__status-dot--open" title="Not done" />;
+            })()}
             <div className="vault-action-card__drag-handle">⠿</div>
-            {editingTitle ? (
-                <input
-                    className="vault-action-card__title-input"
-                    autoFocus
-                    value={draftTitle}
-                    onChange={(e) => setDraftTitle(e.target.value)}
-                    onBlur={commitTitle}
-                    onKeyDown={(e) => {
-                        if (e.key === 'Enter') {
-                            e.preventDefault();
-                            commitTitle();
-                        } else if (e.key === 'Escape') {
-                            e.preventDefault();
-                            setEditingTitle(false);
-                        }
-                    }}
-                    onClick={(e) => e.stopPropagation()}
-                    onMouseDown={(e) => e.stopPropagation()}
-                    onDoubleClick={(e) => e.stopPropagation()}
-                />
-            ) : (
-                <div
-                    className="vault-action-card__title"
-                    onDoubleClick={startTitleEdit}
-                    title="Double-click to edit"
-                >
-                    {item.name__v}
-                </div>
-            )}
-            <div className="vault-action-card__meta">
-                <span className="vault-action-card__owner">
-                    <span className="vault-action-card__role-label">Created by</span> {ownerName}
-                </span>
+            <div className="vault-action-card__title">{item.name__v}</div>
+            <div className="vault-action-card__field-row">
+                <span className="vault-action-card__field-label">Assigned to:</span>
+                <span>{assigneeName || 'Unassigned'}</span>
             </div>
-            <div className="vault-action-card__assignee-row">
-                <span className="vault-action-card__role-label">Assigned to</span>
-                {editingAssignee ? (
-                    <UserTypeAhead
-                        value={item.assignee__c}
-                        displayName={assigneeName}
-                        onChange={(id, name) => {
-                            onAssigneeChange(id, name);
-                            setEditingAssignee(false);
-                        }}
-                        placeholder="Search users..."
-                        autoFocus
-                    />
-                ) : (
-                    <button
-                        className={'vault-assignee-btn' + (assigneeName ? ' vault-assignee-btn--assigned' : '')}
-                        onClick={(e) => { e.stopPropagation(); setEditingAssignee(true); }}
-                        title="Click to assign"
-                    >
-                        {assigneeName || '+ Assign'}
-                    </button>
-                )}
+            <div className="vault-action-card__field-row">
+                <span className="vault-action-card__field-label">Status:</span>
+                <span>{statusLabel}</span>
             </div>
-            <select
-                className="vault-status-select"
-                value={item.status__c}
-                onChange={(e) => onStatusChange(e.target.value)}
-                onClick={(e) => e.stopPropagation()}
-            >
-                <option value="open__c">Not Started</option>
-                <option value="in_progress__c">In Progress</option>
-                <option value="done__c">Done</option>
-            </select>
             {item.due_date__c && (
-                <div className="vault-action-card__meta">
-                    <span className="vault-action-card__due">Due {formatDate(item.due_date__c)}</span>
+                <div className="vault-action-card__field-row">
+                    <span className="vault-action-card__field-label">Due Date:</span>
+                    <span>{formatDateMonthDay(item.due_date__c)}</span>
                 </div>
             )}
             {item.completed_at__c && (
-                <div className="vault-text-small vault-text-muted">
-                    Completed {formatDateTime(item.completed_at__c)}
+                <div className="vault-action-card__field-row">
+                    <span className="vault-action-card__field-label">Completed:</span>
+                    <span>{formatDateMonthDay(item.completed_at__c)}</span>
                 </div>
             )}
         </div>
