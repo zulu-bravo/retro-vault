@@ -4,8 +4,9 @@
 // If a (release, team) bucket has zero votes, falls back to item-count ratio so
 // the chart isn't blank for unvoted boards.
 import React, { useEffect, useState, useMemo } from 'react';
-import { fetchAllFeedback, fetchBoards, fetchTeams } from '../api/vault';
+import { fetchAllFeedback, fetchFeedbackForBoard, fetchBoards, fetchTeams, userName } from '../api/vault';
 import Spinner, { EmptyState } from '../components/Spinner';
+import { ThemeBadge } from '../components/Badge';
 
 // Up to 6 distinct team colors. Cycles if more teams.
 const TEAM_PALETTE = [
@@ -24,6 +25,8 @@ export default function Insights({ showToast }) {
     const [teams, setTeams] = useState([]);
     const [hover, setHover] = useState(null);
     const [hiddenTeams, setHiddenTeams] = useState(() => new Set());
+    const [drillDown, setDrillDown] = useState(null);  // { boardId, boardName, teamName, teamColor, release }
+    const [drillFeedback, setDrillFeedback] = useState(null);
 
     useEffect(() => {
         (async () => {
@@ -67,6 +70,24 @@ export default function Insights({ showToast }) {
         setHiddenTeams(new Set());
     }
 
+    async function handleDrillDown(point, teamName, teamColor) {
+        if (!point || !point.boardId) return;
+        setDrillDown({ boardId: point.boardId, boardName: point.boardName || point.release, teamName, teamColor, release: point.release });
+        setDrillFeedback(null);
+        try {
+            const items = await fetchFeedbackForBoard(point.boardId);
+            setDrillFeedback(items);
+        } catch (err) {
+            showToast && showToast('Failed to load board feedback: ' + err.message, 'error');
+            setDrillFeedback([]);
+        }
+    }
+
+    function closeDrillDown() {
+        setDrillDown(null);
+        setDrillFeedback(null);
+    }
+
     if (loading) return <Spinner />;
     if (!chart || chart.releases.length === 0) {
         return (
@@ -101,10 +122,18 @@ export default function Insights({ showToast }) {
                         onIsolate={isolateTeam}
                         onShowAll={showAll}
                     />
-                    <SentimentChart chart={{ ...chart, series: visibleSeries }} hover={hover} setHover={setHover} />
-                    <SentimentTable chart={{ ...chart, series: visibleSeries }} />
+                    <SentimentChart chart={{ ...chart, series: visibleSeries }} hover={hover} setHover={setHover} onSelect={handleDrillDown} />
+                    <SentimentTable chart={{ ...chart, series: visibleSeries }} onSelect={handleDrillDown} />
                 </div>
             </div>
+
+            {drillDown && (
+                <DrillDownPanel
+                    drillDown={drillDown}
+                    feedback={drillFeedback}
+                    onClose={closeDrillDown}
+                />
+            )}
         </>
     );
 }
@@ -137,10 +166,12 @@ function buildChart(feedback, boards, teams) {
         if (cat !== 'went_well__c' && cat !== 'didnt_go_well__c') continue;
         const weight = Number(fi.vote_count__c) || 0;
         const key = `${board.release_tag__c}|${board.team__c}`;
-        if (!buckets.has(key)) buckets.set(key, { wwVotes: 0, totalVotes: 0, wwCount: 0, totalCount: 0 });
+        if (!buckets.has(key)) buckets.set(key, { wwVotes: 0, totalVotes: 0, wwCount: 0, totalCount: 0, boardId: board.id, boardName: board.name__v });
         const b = buckets.get(key);
         b.totalVotes += weight;
         b.totalCount += 1;
+        b.boardId = board.id;
+        b.boardName = board.name__v;
         if (cat === 'went_well__c') {
             b.wwVotes += weight;
             b.wwCount += 1;
@@ -183,8 +214,11 @@ function buildChart(feedback, boards, teams) {
                 sentiment,
                 wwVotes: b.wwVotes,
                 totalVotes: b.totalVotes,
+                tiVotes: b.totalVotes - b.wwVotes,
                 wwCount: b.wwCount,
                 totalCount: b.totalCount,
+                boardId: b.boardId,
+                boardName: b.boardName,
             });
         });
         return { teamId: t.id, teamName: t.name, color: t.color, points };
@@ -228,7 +262,7 @@ function Legend({ teams, hiddenTeams, onToggle, onIsolate, onShowAll }) {
     );
 }
 
-function SentimentChart({ chart, hover, setHover }) {
+function SentimentChart({ chart, hover, setHover, onSelect }) {
     const { releases, series } = chart;
     // Use a fixed viewBox; CSS scales it to container width
     const W = 800, H = 320;
@@ -335,11 +369,13 @@ function SentimentChart({ chart, hover, setHover }) {
                                         r={isHover ? 6 : 4}
                                         fill="white" stroke={s.color} strokeWidth="2"
                                     />
-                                    {/* Larger transparent hit area */}
+                                    {/* Larger transparent hit area — click to drill down */}
                                     <circle
                                         cx={cx} cy={cy} r="14"
                                         fill="transparent"
+                                        style={{ cursor: 'pointer' }}
                                         onMouseEnter={() => setHover({ teamId: s.teamId, teamName: s.teamName, color: s.color, ...p })}
+                                        onClick={() => onSelect && onSelect(p, s.teamName, s.color)}
                                     />
                                 </g>
                             );
@@ -402,7 +438,7 @@ function Tooltip({ x, y, hover, chartW }) {
     );
 }
 
-function SentimentTable({ chart }) {
+function SentimentTable({ chart, onSelect }) {
     const { releases, series } = chart;
     return (
         <table className="vault-table vault-mt-24">
@@ -422,17 +458,16 @@ function SentimentTable({ chart }) {
                             if (p.sentiment === null) {
                                 return <td key={p.release}>—</td>;
                             }
-                            const wwCount = p.wwCount || 0;
-                            const tiCount = (p.totalCount || 0) - wwCount;
                             return (
-                                <td key={p.release}>
-                                    <div className="vault-chart-cell">
-                                        <div className="vault-chart-cell__pct">{p.sentiment}%</div>
-                                        <div className="vault-chart-cell__counts">
-                                            <span className="vault-chart-cell__pos" title="Went Well items">▲ {wwCount}</span>
-                                            <span className="vault-chart-cell__neg" title="To Improve items">▼ {tiCount}</span>
-                                        </div>
-                                    </div>
+                                <td
+                                    key={p.release}
+                                    className="vault-chart-cell--clickable"
+                                    onClick={() => onSelect && onSelect(p, s.teamName, s.color)}
+                                    title="Click to see board feedback"
+                                >
+                                    <span className="vault-chart-cell__pct">{p.sentiment}%</span>
+                                    <span className="vault-chart-cell__pos" title="Weighted positive">▲{p.wwVotes || 0}</span>
+                                    <span className="vault-chart-cell__neg" title="Weighted negative">▼{p.tiVotes || 0}</span>
                                 </td>
                             );
                         })}
@@ -440,5 +475,59 @@ function SentimentTable({ chart }) {
                 ))}
             </tbody>
         </table>
+    );
+}
+
+/* ---------- Drill-down panel ---------- */
+
+function DrillDownPanel({ drillDown, feedback, onClose }) {
+    const { boardName, teamName, teamColor, release } = drillDown;
+
+    const wentWell = (feedback || []).filter(fi => fi.category__c === 'went_well__c')
+        .sort((a, b) => (Number(b.vote_count__c) || 0) - (Number(a.vote_count__c) || 0));
+    const toImprove = (feedback || []).filter(fi => fi.category__c === 'didnt_go_well__c')
+        .sort((a, b) => (Number(b.vote_count__c) || 0) - (Number(a.vote_count__c) || 0));
+
+    return (
+        <div className="vault-card vault-mb-24 vault-drilldown">
+            <div className="vault-card__header">
+                <span className="vault-card__title">
+                    <span className="vault-chart-legend__swatch" style={{ background: teamColor }} />
+                    {' '}{teamName} — {release}
+                </span>
+                <button className="vault-action-btn" onClick={onClose} title="Close">×</button>
+            </div>
+            <div className="vault-card__body">
+                {!feedback ? (
+                    <Spinner />
+                ) : wentWell.length === 0 && toImprove.length === 0 ? (
+                    <EmptyState message="No Went Well / To Improve items on this board." />
+                ) : (
+                    <div className="vault-drilldown__columns">
+                        <DrillColumn title="Went Well" items={wentWell} accentClass="vault-drilldown__col--positive" />
+                        <DrillColumn title="To Improve" items={toImprove} accentClass="vault-drilldown__col--negative" />
+                    </div>
+                )}
+            </div>
+        </div>
+    );
+}
+
+function DrillColumn({ title, items, accentClass }) {
+    return (
+        <div className={'vault-drilldown__col ' + (accentClass || '')}>
+            <div className="vault-drilldown__col-header">{title} ({items.length})</div>
+            {items.map(fi => (
+                <div key={fi.id} className="vault-drilldown__item">
+                    <div className="vault-drilldown__item-content">{fi.content__c}</div>
+                    <div className="vault-drilldown__item-meta">
+                        <span>{userName(fi, 'author')}</span>
+                        {fi.theme__c && <ThemeBadge theme={fi.theme__c} />}
+                        {fi.feature__c && <span className="vault-feedback-card__feature">{fi.feature__c}</span>}
+                        <span className="vault-drilldown__item-votes">▲ {Number(fi.vote_count__c) || 0}</span>
+                    </div>
+                </div>
+            ))}
+        </div>
     );
 }
