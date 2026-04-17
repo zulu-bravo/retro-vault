@@ -1363,12 +1363,10 @@ function ActionCard({ item, assigneeName, statusLabel, highlighted, dropPosition
                 <span className="vault-action-card__field-label">Status:</span>
                 <span>{statusLabel}</span>
             </div>
-            {item.due_date__c && (
-                <div className="vault-action-card__field-row">
-                    <span className="vault-action-card__field-label">Due Date:</span>
-                    <span>{formatDateMonthDay(item.due_date__c)}</span>
-                </div>
-            )}
+            <div className="vault-action-card__field-row">
+                <span className="vault-action-card__field-label">Due Date:</span>
+                <span>{item.due_date__c ? formatDateMonthDay(item.due_date__c) : '—'}</span>
+            </div>
             <div className="vault-action-card__field-row">
                 <span className="vault-action-card__field-label">Completed:</span>
                 <span>{item.completed_at__c ? formatDateMonthDay(item.completed_at__c) : '—'}</span>
