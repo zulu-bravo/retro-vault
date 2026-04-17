@@ -45,6 +45,7 @@ export default function Insights({ showToast }) {
     }, []);
 
     const chart = useMemo(() => buildChart(feedback, boards, teams), [feedback, boards, teams]);
+    const blockers = useMemo(() => computeBlockers(feedback), [feedback]);
 
     function toggleTeam(teamId) {
         setHiddenTeams(prev => {
@@ -89,40 +90,42 @@ export default function Insights({ showToast }) {
     }
 
     if (loading) return <Spinner />;
-    if (!chart || chart.releases.length === 0) {
-        return (
-            <>
-                <Header />
-                <div className="vault-card vault-mb-24">
-                    <div className="vault-card__body">
-                        <EmptyState message="No release sentiment yet — add some Went Well / To Improve feedback to a board with a Release Tag." />
-                    </div>
-                </div>
-            </>
-        );
-    }
 
-    const visibleSeries = chart.series.filter(s => !hiddenTeams.has(s.teamId));
+    const visibleSeries = chart ? chart.series.filter(s => !hiddenTeams.has(s.teamId)) : [];
 
     return (
         <>
             <Header />
-            <div className="vault-card vault-mb-24">
-                <div className="vault-card__header">
-                    <span className="vault-card__title">Release Sentiment</span>
+            <div style={{ display: 'flex', gap: 24, alignItems: 'flex-start' }}>
+                <div className="vault-card vault-mb-24" style={{ flex: '2 1 0', minWidth: 0 }}>
+                    <div className="vault-card__header">
+                        <span className="vault-card__title">Release Sentiment</span>
+                    </div>
+                    <div className="vault-card__body">
+                        {!chart || chart.releases.length === 0 ? (
+                            <EmptyState message="No release sentiment yet — add some Went Well / To Improve feedback to a board with a Release Tag." />
+                        ) : (
+                            <>
+                                <p className="vault-text-small vault-text-muted vault-mb-16">
+                                    For each release × team, sentiment = vote-weighted Went Well share of the total Went Well + To Improve. Higher means a happier retro. Click a team to hide it; double-click to isolate.
+                                </p>
+                                <Legend
+                                    teams={chart.teamMeta}
+                                    hiddenTeams={hiddenTeams}
+                                    onToggle={toggleTeam}
+                                    onIsolate={isolateTeam}
+                                    onShowAll={showAll}
+                                />
+                                <SentimentChart chart={{ ...chart, series: visibleSeries }} hover={hover} setHover={setHover} onSelect={handleDrillDown} />
+                            </>
+                        )}
+                    </div>
                 </div>
-                <div className="vault-card__body">
-                    <p className="vault-text-small vault-text-muted vault-mb-16">
-                        For each release × team, sentiment = vote-weighted Went Well share of the total Went Well + To Improve. Higher means a happier retro. Click a team to hide it; double-click to isolate.
-                    </p>
-                    <Legend
-                        teams={chart.teamMeta}
-                        hiddenTeams={hiddenTeams}
-                        onToggle={toggleTeam}
-                        onIsolate={isolateTeam}
-                        onShowAll={showAll}
-                    />
-                    <SentimentChart chart={{ ...chart, series: visibleSeries }} hover={hover} setHover={setHover} onSelect={handleDrillDown} />
+                <div className="vault-card vault-mb-24" style={{ flex: '1 1 0', minWidth: 280 }}>
+                    <div className="vault-card__header">
+                        <span className="vault-card__title">Recurring Blockers</span>
+                    </div>
+                    <BlockersPanel blockers={blockers} />
                 </div>
             </div>
 
@@ -224,6 +227,22 @@ function buildChart(feedback, boards, teams) {
     });
 
     return { releases, teamMeta, series };
+}
+
+function computeBlockers(feedback) {
+    const themeMap = {};
+    for (const fi of feedback) {
+        if (fi.category__c !== 'didnt_go_well__c' || !fi.theme__c) continue;
+        const t = fi.theme__c;
+        if (!themeMap[t]) themeMap[t] = { theme: t, boards: new Set(), votes: 0, count: 0 };
+        themeMap[t].boards.add(fi.retro_board__c);
+        themeMap[t].votes += Number(fi.vote_count__c) || 0;
+        themeMap[t].count++;
+    }
+    return Object.values(themeMap)
+        .map(t => ({ ...t, boardCount: t.boards.size }))
+        .filter(t => t.boardCount >= 2)
+        .sort((a, b) => b.boardCount - a.boardCount || b.votes - a.votes);
 }
 
 /* ---------- Render ---------- */
@@ -434,6 +453,33 @@ function Tooltip({ x, y, hover, chartW }) {
                 Click to view details
             </text>
         </g>
+    );
+}
+
+function BlockersPanel({ blockers }) {
+    if (blockers.length === 0) {
+        return (
+            <div className="vault-card__body">
+                <EmptyState message="No recurring blockers yet — themes must appear on 2+ boards." />
+            </div>
+        );
+    }
+    return (
+        <table className="vault-table">
+            <thead>
+                <tr><th>Theme</th><th>Boards</th><th>Mentions</th><th>Votes</th></tr>
+            </thead>
+            <tbody>
+                {blockers.map(b => (
+                    <tr key={b.theme}>
+                        <td><ThemeBadge theme={b.theme} /></td>
+                        <td>{b.boardCount}</td>
+                        <td>{b.count}</td>
+                        <td>{b.votes}</td>
+                    </tr>
+                ))}
+            </tbody>
+        </table>
     );
 }
 
