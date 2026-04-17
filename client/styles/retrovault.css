@@ -518,6 +518,19 @@
     box-shadow: 0 1px 3px var(--vault-focus-ring);
 }
 
+/* Highlighted action card — pulsing blue glow to draw the user's eye
+   when arriving via a deep link from the Actions tab. */
+.vault-action-card--highlighted {
+    border-color: var(--vault-primary);
+    box-shadow: 0 0 0 3px var(--vault-focus-ring);
+    animation: vault-highlight-pulse 1.5s ease-in-out 3;
+}
+
+@keyframes vault-highlight-pulse {
+    0%, 100% { box-shadow: 0 0 0 3px var(--vault-focus-ring); }
+    50% { box-shadow: 0 0 0 6px var(--vault-focus-ring), 0 0 12px var(--vault-focus-ring); }
+}
+
 /* Top-right status indicator — warning-orange dot (not done) or green
    checkmark (done). Orange rather than red since a pending action is an
    attention cue, not an error state (matches Dashboard open-actions line). */
