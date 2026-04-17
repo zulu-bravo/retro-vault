@@ -737,6 +737,17 @@
     border-color: var(--vault-gray-300);
 }
 
+.vault-btn--danger {
+    background: var(--vault-danger);
+    color: var(--vault-text-on-brand);
+    border-color: var(--vault-danger);
+}
+
+.vault-btn--danger:hover:not(:disabled) {
+    background: #a80f00;
+    border-color: #a80f00;
+}
+
 .vault-btn--small {
     padding: 4px 8px;
     font-size: var(--vault-font-size-xs);
