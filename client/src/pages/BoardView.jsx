@@ -1314,11 +1314,8 @@ function ActionCard({ item, assigneeName, statusLabel, highlighted, dropPosition
                 if (dueYmd && dueYmd < todayYmd) {
                     return (
                         <span className="vault-action-card__status-dot vault-action-card__status-dot--overdue" title={`Overdue — due ${formatDate(item.due_date__c)}`}>
-                            <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true">
-                                <path d="M8 1 L15 14 L1 14 Z" />
-                                <rect x="7.25" y="5.5" width="1.5" height="4.5" rx="0.5" fill="#ffffff" />
-                                <rect x="7.25" y="11" width="1.5" height="1.5" rx="0.5" fill="#ffffff" />
-                            </svg>
+                            <span className="vault-action-card__overdue-label">overdue</span>
+                            <span className="vault-action-card__status-dot--open" />
                         </span>
                     );
                 }

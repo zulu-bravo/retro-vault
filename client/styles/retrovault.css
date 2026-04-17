@@ -557,15 +557,19 @@
     font-weight: var(--vault-font-weight-bold);
 }
 
-/* Overdue warning — solid red Figma $red-default triangle with a white
-   exclamation. Semantically "Error accent", fitting an action item that
-   has missed its due date. */
+/* Overdue indicator — "overdue" label + orange dot, matching the open
+   indicator color ($orange-darkest / --vault-warning). */
 .vault-action-card__status-dot--overdue {
-    line-height: 0;
+    display: inline-flex;
+    align-items: center;
+    gap: var(--vault-space-1);
 }
 
-.vault-action-card__status-dot--overdue svg path {
-    fill: var(--vault-danger);
+.vault-action-card__overdue-label {
+    font-size: var(--vault-font-size-xs);
+    font-weight: var(--vault-font-weight-medium);
+    color: var(--vault-warning);
+    line-height: 1;
 }
 
 .vault-action-card__title {
