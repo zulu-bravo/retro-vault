@@ -1002,12 +1002,27 @@ export default function BoardView({ boardId, highlightActionId, navigate, showTo
                 const confirmLabel = isKudos
                     ? (fbModal.id ? 'Save Changes' : 'Send Kudos')
                     : (fbModal.id ? 'Save Changes' : 'Add Feedback');
+                const editingItem = fbModal.id ? feedback.find(f => f.id === fbModal.id) : null;
+                const canDelete = editingItem && (
+                    currentUserId === board?.facilitator__c || currentUserId === editingItem.author__c
+                );
                 return (
                     <Modal
                         title={titleLabel}
                         confirmLabel={confirmLabel}
                         onClose={resetFbModal}
                         onConfirm={submitFeedback}
+                        onDelete={fbModal.id ? async () => {
+                            try {
+                                await deleteRecord('retro_feedback__c', fbModal.id);
+                                setFeedback(prev => prev.filter(f => f.id !== fbModal.id));
+                                resetFbModal();
+                                showToast('Deleted.', 'success');
+                            } catch (err) {
+                                showToast('Delete failed: ' + err.message, 'error');
+                            }
+                        } : undefined}
+                        deleteDisabled={!canDelete}
                     >
                         <div className="vault-form">
                             {isKudos && (
@@ -1067,12 +1082,28 @@ export default function BoardView({ boardId, highlightActionId, navigate, showTo
             })()}
 
             {/* Action Item Modal */}
-            {aiModal && (
+            {aiModal && (() => {
+                const editingAction = aiModal.id ? actions.find(a => a.id === aiModal.id) : null;
+                const canDeleteAction = editingAction && (
+                    currentUserId === board?.facilitator__c || currentUserId === editingAction.owner__c
+                );
+                return (
                 <Modal
                     title={aiModal.id ? 'Edit Action Item' : 'Add Action Item'}
                     confirmLabel={aiModal.id ? 'Save Changes' : 'Add Item'}
                     onClose={resetAiModal}
                     onConfirm={submitAction}
+                    onDelete={aiModal.id ? async () => {
+                        try {
+                            await deleteRecord('retro_action__c', aiModal.id);
+                            setActions(prev => prev.filter(a => a.id !== aiModal.id));
+                            resetAiModal();
+                            showToast('Deleted.', 'success');
+                        } catch (err) {
+                            showToast('Delete failed: ' + err.message, 'error');
+                        }
+                    } : undefined}
+                    deleteDisabled={!canDeleteAction}
                 >
                     <div className="vault-form">
                         {aiModal.id && (
@@ -1128,7 +1159,8 @@ export default function BoardView({ boardId, highlightActionId, navigate, showTo
                         )}
                     </div>
                 </Modal>
-            )}
+                );
+            })()}
         </>
     );
 }
@@ -1337,12 +1369,10 @@ function ActionCard({ item, assigneeName, statusLabel, highlighted, dropPosition
                     <span>{formatDateMonthDay(item.due_date__c)}</span>
                 </div>
             )}
-            {item.completed_at__c && (
-                <div className="vault-action-card__field-row">
-                    <span className="vault-action-card__field-label">Completed:</span>
-                    <span>{formatDateMonthDay(item.completed_at__c)}</span>
-                </div>
-            )}
+            <div className="vault-action-card__field-row">
+                <span className="vault-action-card__field-label">Completed:</span>
+                <span>{item.completed_at__c ? formatDateMonthDay(item.completed_at__c) : '—'}</span>
+            </div>
         </div>
     );
 }
