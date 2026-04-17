@@ -4,8 +4,9 @@
 // If a (release, team) bucket has zero votes, falls back to item-count ratio so
 // the chart isn't blank for unvoted boards.
 import React, { useEffect, useState, useMemo } from 'react';
-import { fetchAllFeedback, fetchBoards, fetchTeams } from '../api/vault';
+import { fetchAllFeedback, fetchFeedbackForBoard, fetchBoards, fetchTeams, userName } from '../api/vault';
 import Spinner, { EmptyState } from '../components/Spinner';
+import { ThemeBadge } from '../components/Badge';
 
 // Up to 6 distinct team colors. Cycles if more teams.
 const TEAM_PALETTE = [
@@ -24,6 +25,8 @@ export default function Insights({ showToast }) {
     const [teams, setTeams] = useState([]);
     const [hover, setHover] = useState(null);
     const [hiddenTeams, setHiddenTeams] = useState(() => new Set());
+    const [drillDown, setDrillDown] = useState(null);  // { boardId, boardName, teamName, teamColor, release }
+    const [drillFeedback, setDrillFeedback] = useState(null);
 
     useEffect(() => {
         (async () => {
@@ -67,6 +70,24 @@ export default function Insights({ showToast }) {
         setHiddenTeams(new Set());
     }
 
+    async function handleDrillDown(point, teamName, teamColor) {
+        if (!point || !point.boardId) return;
+        setDrillDown({ boardId: point.boardId, boardName: point.boardName || point.release, teamName, teamColor, release: point.release });
+        setDrillFeedback(null);
+        try {
+            const items = await fetchFeedbackForBoard(point.boardId);
+            setDrillFeedback(items);
+        } catch (err) {
+            showToast && showToast('Failed to load board feedback: ' + err.message, 'error');
+            setDrillFeedback([]);
+        }
+    }
+
+    function closeDrillDown() {
+        setDrillDown(null);
+        setDrillFeedback(null);
+    }
+
     if (loading) return <Spinner />;
     if (!chart || chart.releases.length === 0) {
         return (
@@ -101,10 +122,17 @@ export default function Insights({ showToast }) {
                         onIsolate={isolateTeam}
                         onShowAll={showAll}
                     />
-                    <SentimentChart chart={{ ...chart, series: visibleSeries }} hover={hover} setHover={setHover} />
-                    <SentimentTable chart={{ ...chart, series: visibleSeries }} />
+                    <SentimentChart chart={{ ...chart, series: visibleSeries }} hover={hover} setHover={setHover} onSelect={handleDrillDown} />
                 </div>
             </div>
+
+            {drillDown && (
+                <DrillDownPanel
+                    drillDown={drillDown}
+                    feedback={drillFeedback}
+                    onClose={closeDrillDown}
+                />
+            )}
         </>
     );
 }
@@ -137,10 +165,12 @@ function buildChart(feedback, boards, teams) {
         if (cat !== 'went_well__c' && cat !== 'didnt_go_well__c') continue;
         const weight = Number(fi.vote_count__c) || 0;
         const key = `${board.release_tag__c}|${board.team__c}`;
-        if (!buckets.has(key)) buckets.set(key, { wwVotes: 0, totalVotes: 0, wwCount: 0, totalCount: 0 });
+        if (!buckets.has(key)) buckets.set(key, { wwVotes: 0, totalVotes: 0, wwCount: 0, totalCount: 0, boardId: board.id, boardName: board.name__v });
         const b = buckets.get(key);
         b.totalVotes += weight;
         b.totalCount += 1;
+        b.boardId = board.id;
+        b.boardName = board.name__v;
         if (cat === 'went_well__c') {
             b.wwVotes += weight;
             b.wwCount += 1;
@@ -183,8 +213,11 @@ function buildChart(feedback, boards, teams) {
                 sentiment,
                 wwVotes: b.wwVotes,
                 totalVotes: b.totalVotes,
+                tiVotes: b.totalVotes - b.wwVotes,
                 wwCount: b.wwCount,
                 totalCount: b.totalCount,
+                boardId: b.boardId,
+                boardName: b.boardName,
             });
         });
         return { teamId: t.id, teamName: t.name, color: t.color, points };
@@ -228,7 +261,7 @@ function Legend({ teams, hiddenTeams, onToggle, onIsolate, onShowAll }) {
     );
 }
 
-function SentimentChart({ chart, hover, setHover }) {
+function SentimentChart({ chart, hover, setHover, onSelect }) {
     const { releases, series } = chart;
     // Use a fixed viewBox; CSS scales it to container width
     const W = 800, H = 320;
@@ -335,11 +368,13 @@ function SentimentChart({ chart, hover, setHover }) {
                                         r={isHover ? 6 : 4}
                                         fill="white" stroke={s.color} strokeWidth="2"
                                     />
-                                    {/* Larger transparent hit area */}
+                                    {/* Larger transparent hit area — click to drill down */}
                                     <circle
                                         cx={cx} cy={cy} r="14"
                                         fill="transparent"
+                                        style={{ cursor: 'pointer' }}
                                         onMouseEnter={() => setHover({ teamId: s.teamId, teamName: s.teamName, color: s.color, ...p })}
+                                        onClick={() => onSelect && onSelect(p, s.teamName, s.color)}
                                     />
                                 </g>
                             );
@@ -374,56 +409,84 @@ function buildSegments(points) {
 }
 
 function Tooltip({ x, y, hover, chartW }) {
-    const W = 200, H = 78;
-    // Flip horizontally if tooltip would overflow the right side
+    const W = 220, H = 72;
     const onRight = x + W + 12 > chartW;
     const tx = onRight ? x - W - 12 : x + 12;
     const ty = Math.max(8, y - H / 2);
-    const voted = hover.totalVotes > 0;
 
     return (
         <g className="vault-chart__tooltip" pointerEvents="none">
             <rect x={tx} y={ty} width={W} height={H} rx="4" className="vault-chart__tooltip-bg" />
             <text x={tx + 12} y={ty + 18} className="vault-chart__tooltip-title">
-                <tspan fill={hover.color}>● </tspan>{hover.teamName}
+                {hover.boardName || hover.release}
             </text>
-            <text x={tx + 12} y={ty + 36} className="vault-chart__tooltip-meta">
-                {hover.release} — <tspan className="vault-chart__tooltip-value">{hover.sentiment}%</tspan>
+            <text x={tx + 12} y={ty + 33} className="vault-chart__tooltip-meta">
+                <tspan fill={hover.color}>● </tspan>{hover.teamName} · {hover.release}
             </text>
-            <text x={tx + 12} y={ty + 54} className="vault-chart__tooltip-meta">
-                {voted
-                    ? `${hover.wwVotes} of ${hover.totalVotes} votes positive`
-                    : `${hover.wwCount} of ${hover.totalCount} items positive`}
+            <text x={tx + 12} y={ty + 48} className="vault-chart__tooltip-meta">
+                <tspan className="vault-chart__tooltip-value">{hover.sentiment}%</tspan>
+                {'  '}
+                <tspan fill="var(--vault-success)">▲{hover.wwVotes || 0}</tspan>
+                {'  '}
+                <tspan fill="var(--vault-danger)">▼{hover.tiVotes || 0}</tspan>
             </text>
-            <text x={tx + 12} y={ty + 70} className="vault-chart__tooltip-meta">
-                {hover.totalCount} feedback item{hover.totalCount === 1 ? '' : 's'}{voted ? '' : ' (no votes)'}
+            <text x={tx + 12} y={ty + 64} className="vault-chart__tooltip-hint">
+                Click to view details
             </text>
         </g>
     );
 }
 
-function SentimentTable({ chart }) {
-    const { releases, series } = chart;
+/* ---------- Drill-down panel ---------- */
+
+function DrillDownPanel({ drillDown, feedback, onClose }) {
+    const { boardName, teamName, teamColor, release } = drillDown;
+
+    const wentWell = (feedback || []).filter(fi => fi.category__c === 'went_well__c')
+        .sort((a, b) => (Number(b.vote_count__c) || 0) - (Number(a.vote_count__c) || 0));
+    const toImprove = (feedback || []).filter(fi => fi.category__c === 'didnt_go_well__c')
+        .sort((a, b) => (Number(b.vote_count__c) || 0) - (Number(a.vote_count__c) || 0));
+
     return (
-        <table className="vault-table vault-mt-24">
-            <thead>
-                <tr>
-                    <th>Team</th>
-                    {releases.map(r => <th key={r}>{r}</th>)}
-                </tr>
-            </thead>
-            <tbody>
-                {series.map(s => (
-                    <tr key={s.teamId}>
-                        <td className="vault-text-bold">
-                            <span className="vault-chart-legend__swatch" style={{ background: s.color }} /> {s.teamName}
-                        </td>
-                        {s.points.map(p => (
-                            <td key={p.release}>{p.sentiment === null ? '—' : `${p.sentiment}%`}</td>
-                        ))}
-                    </tr>
-                ))}
-            </tbody>
-        </table>
+        <div className="vault-card vault-mb-24 vault-drilldown">
+            <div className="vault-card__header">
+                <span className="vault-card__title">
+                    <span className="vault-chart-legend__swatch" style={{ background: teamColor }} />
+                    {' '}{teamName} — {release}
+                </span>
+                <button className="vault-action-btn" onClick={onClose} title="Close">×</button>
+            </div>
+            <div className="vault-card__body">
+                {!feedback ? (
+                    <Spinner />
+                ) : wentWell.length === 0 && toImprove.length === 0 ? (
+                    <EmptyState message="No Went Well / To Improve items on this board." />
+                ) : (
+                    <div className="vault-drilldown__columns">
+                        <DrillColumn title="Went Well" items={wentWell} accentClass="vault-drilldown__col--positive" />
+                        <DrillColumn title="To Improve" items={toImprove} accentClass="vault-drilldown__col--negative" />
+                    </div>
+                )}
+            </div>
+        </div>
+    );
+}
+
+function DrillColumn({ title, items, accentClass }) {
+    return (
+        <div className={'vault-drilldown__col ' + (accentClass || '')}>
+            <div className="vault-drilldown__col-header">{title} ({items.length})</div>
+            {items.map(fi => (
+                <div key={fi.id} className="vault-drilldown__item">
+                    <div className="vault-drilldown__item-content">{fi.content__c}</div>
+                    <div className="vault-drilldown__item-meta">
+                        <span>{userName(fi, 'author')}</span>
+                        {fi.theme__c && <ThemeBadge theme={fi.theme__c} />}
+                        {fi.feature__c && <span className="vault-feedback-card__feature">{fi.feature__c}</span>}
+                        <span className="vault-drilldown__item-votes">▲ {Number(fi.vote_count__c) || 0}</span>
+                    </div>
+                </div>
+            ))}
+        </div>
     );
 }
