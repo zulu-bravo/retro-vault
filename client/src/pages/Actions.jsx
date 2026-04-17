@@ -84,18 +84,11 @@ export default function Actions({ showToast }) {
                                     <td>{item.daysOverdue}</td>
                                     <td>
                                         <button
-                                            className="vault-btn vault-btn--secondary vault-btn--small"
-                                            onClick={async () => {
-                                                try {
-                                                    await navigator.clipboard.writeText(formatItemForClipboard(item));
-                                                    showToast('Copied to clipboard', 'success');
-                                                } catch (err) {
-                                                    showToast('Copy failed: ' + err.message, 'error');
-                                                }
-                                            }}
-                                            title="Copy details to clipboard"
+                                            className="vault-btn vault-btn--primary vault-btn--small"
+                                            onClick={() => navigateToBoard(item.boardId, item.id)}
+                                            title="Go to this action item on the board"
                                         >
-                                            Copy
+                                            View on Board
                                         </button>
                                     </td>
                                 </tr>
@@ -225,13 +218,16 @@ function CompletionRatePanel({ rows }) {
     );
 }
 
-function formatItemForClipboard(item) {
-    return [
-        item.title,
-        `Board: ${item.boardName}`,
-        `Due Date: ${item.dueDate}`,
-        `Days Overdue: ${item.daysOverdue}`
-    ].join('\n');
+function navigateToBoard(boardId, actionId) {
+    try {
+        const top = window.top;
+        const tabCollection = new URLSearchParams(top.location.search).get('tab-collection');
+        const search = tabCollection ? '?tab-collection=' + encodeURIComponent(tabCollection) : '';
+        const path = encodeURIComponent(boardId) + (actionId ? '/' + encodeURIComponent(actionId) : '');
+        top.location.href = top.location.origin + '/ui/' + search + '#custom/page/retrovault/' + path;
+    } catch (e) {
+        console.warn('[RetroVault] Cannot navigate top frame:', e.message);
+    }
 }
 
 /* ---------- Compute helpers ---------- */

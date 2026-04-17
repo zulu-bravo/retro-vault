@@ -69,7 +69,7 @@ function buildColumnDisplay(items) {
     return result;
 }
 
-export default function BoardView({ boardId, navigate, showToast }) {
+export default function BoardView({ boardId, highlightActionId, navigate, showToast }) {
     const currentUserId = getCurrentUserId();
 
     const [loading, setLoading] = useState(true);
@@ -888,6 +888,7 @@ export default function BoardView({ boardId, navigate, showToast }) {
                                                 item={a}
                                                 assigneeName={a['assignee__cr.name__v'] || null}
                                                 statusLabel={actionStatusLabel(a.status__c)}
+                                                highlighted={a.id === highlightActionId}
                                                 onClick={() => openEditAction(a)}
                                                 isDragging={dragging?.id === a.id}
                                                 onDragStart={() => onDragStart({ type: 'action', id: a.id })}
@@ -1212,10 +1213,23 @@ function ContextMenu({ x, y, children, onClose }) {
     );
 }
 
-function ActionCard({ item, assigneeName, statusLabel, onClick, isDragging, onDragStart, onDragOver, onDragEnd }) {
+function ActionCard({ item, assigneeName, statusLabel, highlighted, onClick, isDragging, onDragStart, onDragOver, onDragEnd }) {
+    const cardRef = useRef(null);
+
+    useEffect(() => {
+        if (highlighted && cardRef.current) {
+            cardRef.current.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
+    }, [highlighted]);
+
     return (
         <div
-            className={'vault-action-card vault-action-card--clickable' + (isDragging ? ' vault-action-card--dragging' : '')}
+            ref={cardRef}
+            className={
+                'vault-action-card vault-action-card--clickable' +
+                (isDragging ? ' vault-action-card--dragging' : '') +
+                (highlighted ? ' vault-action-card--highlighted' : '')
+            }
             draggable
             onClick={onClick}
             onDragStart={onDragStart}
