@@ -594,6 +594,7 @@
 .vault-vote-btn {
     display: inline-flex;
     align-items: center;
+    white-space: nowrap;
     gap: var(--vault-space-1);
     padding: 3px var(--vault-space-2);
     border: 1px solid var(--vault-border-strong);
@@ -1008,6 +1009,12 @@
 
 @keyframes vault-spin { to { transform: rotate(360deg); } }
 
+@keyframes vault-drop-land {
+    0%   { transform: scale(0.95); opacity: 0.6; }
+    60%  { transform: scale(1.03); opacity: 1; }
+    100% { transform: scale(1); }
+}
+
 /* Empty State */
 .vault-empty {
     text-align: center;
@@ -1364,6 +1371,22 @@
     border-radius: 1px;
     margin: 2px var(--vault-space-1);
     flex-shrink: 0;
+    pointer-events: none;
+}
+
+/* Drop-target markers rendered via box-shadow so they don't shift layout.
+   Applied directly to the card that is the current drop target. */
+.vault-card--drop-before {
+    box-shadow: 0 -3px 0 0 var(--vault-primary);
+}
+
+.vault-card--drop-after {
+    box-shadow: 0 3px 0 0 var(--vault-primary);
+}
+
+/* Brief "pop-in" when a card lands after being dropped. */
+.vault-card--just-dropped {
+    animation: vault-drop-land 0.35s ease-out;
 }
 
 .vault-feedback-card__drag-handle,

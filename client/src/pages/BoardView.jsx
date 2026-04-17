@@ -111,6 +111,7 @@ export default function BoardView({ boardId, highlightActionId, navigate, showTo
     //   { column, overId, before, isGroup: true,  intoGroup: false } (group target — position)
     //   { column, overId,          isGroup: true,  intoGroup: true }  (group target — join)
     const [dropTarget, setDropTarget] = useState(null);
+    const [justDroppedId, setJustDroppedId] = useState(null);
 
     const loadData = useCallback(async () => {
         try {
@@ -121,8 +122,17 @@ export default function BoardView({ boardId, highlightActionId, navigate, showTo
                 currentUserId ? fetchVotesForUser(currentUserId) : Promise.resolve([])
             ]);
             setBoard(b);
-            setFeedback(f.sort((a, b) => parseInt(b.vote_count__c || 0, 10) - parseInt(a.vote_count__c || 0, 10)));
-            setActions(a);
+            setFeedback(f.sort((x, y) => {
+                const xO = x.order__c != null ? Number(x.order__c) : Infinity;
+                const yO = y.order__c != null ? Number(y.order__c) : Infinity;
+                if (xO !== yO) return xO - yO;
+                return parseInt(y.vote_count__c || 0, 10) - parseInt(x.vote_count__c || 0, 10);
+            }));
+            setActions(a.sort((x, y) => {
+                const xO = x.order__c != null ? Number(x.order__c) : Infinity;
+                const yO = y.order__c != null ? Number(y.order__c) : Infinity;
+                return xO - yO;
+            }));
 
             const boardFeedbackIds = new Set(f.map(fi => fi.id));
             const votes = {};
@@ -257,6 +267,9 @@ export default function BoardView({ boardId, highlightActionId, navigate, showTo
                 if (fbTheme) fields.theme__c = fbTheme;
                 if (fbFeature) fields.feature__c = fbFeature;
                 if (isKudos && fbRecipientId) fields.kudos_recipient__c = fbRecipientId;
+                const maxOrder = feedback.filter(f => f.category__c === fbModal.category)
+                    .reduce((max, f) => Math.max(max, Number(f.order__c) || 0), 0);
+                fields.order__c = String(maxOrder + 1);
 
                 const newId = await create('retro_feedback__c', fields);
                 const newRow = { id: newId, ...fields };
@@ -339,6 +352,8 @@ export default function BoardView({ boardId, highlightActionId, navigate, showTo
                 };
                 if (aiDue) fields.due_date__c = aiDue;
                 if (aiAssigneeId) fields.assignee__c = aiAssigneeId;
+                const maxOrder = actions.reduce((max, a) => Math.max(max, Number(a.order__c) || 0), 0);
+                fields.order__c = String(maxOrder + 1);
 
                 const newId = await create('retro_action__c', fields);
                 setActions(prev => [...prev, {
@@ -506,7 +521,10 @@ export default function BoardView({ boardId, highlightActionId, navigate, showTo
         e.stopPropagation();
         const rect = e.currentTarget.getBoundingClientRect();
         const before = e.clientY < rect.top + rect.height / 2;
-        setDropTarget({ column: columnKey, overId, before, isGroup: false });
+        setDropTarget(prev => {
+            if (prev && prev.column === columnKey && prev.overId === overId && prev.before === before && !prev.isGroup) return prev;
+            return { column: columnKey, overId, before, isGroup: false };
+        });
     }
 
     function onGroupDragOver(e, columnKey, groupId) {
@@ -525,22 +543,23 @@ export default function BoardView({ boardId, highlightActionId, navigate, showTo
         const y = e.clientY - rect.top;
         const h = rect.height;
 
-        // Groups can't nest into groups; cards already in this group can't re-join
         const canJoin =
             drag.type === 'feedback' && drag.fromGroupId !== groupId;
 
+        let next;
         if (!canJoin) {
-            setDropTarget({ column: columnKey, overId: groupId, before: y < h / 2, isGroup: true, intoGroup: false });
-            return;
-        }
-
-        if (y < h * 0.25) {
-            setDropTarget({ column: columnKey, overId: groupId, before: true, isGroup: true, intoGroup: false });
+            next = { column: columnKey, overId: groupId, before: y < h / 2, isGroup: true, intoGroup: false };
+        } else if (y < h * 0.25) {
+            next = { column: columnKey, overId: groupId, before: true, isGroup: true, intoGroup: false };
         } else if (y > h * 0.75) {
-            setDropTarget({ column: columnKey, overId: groupId, before: false, isGroup: true, intoGroup: false });
+            next = { column: columnKey, overId: groupId, before: false, isGroup: true, intoGroup: false };
         } else {
-            setDropTarget({ column: columnKey, overId: groupId, isGroup: true, intoGroup: true });
+            next = { column: columnKey, overId: groupId, isGroup: true, intoGroup: true };
         }
+        setDropTarget(prev => {
+            if (prev && prev.column === next.column && prev.overId === next.overId && prev.before === next.before && prev.isGroup === next.isGroup && prev.intoGroup === next.intoGroup) return prev;
+            return next;
+        });
     }
 
     function onColumnDragOver(e, columnKey) {
@@ -551,7 +570,13 @@ export default function BoardView({ boardId, highlightActionId, navigate, showTo
         }
         e.dataTransfer.dropEffect = 'move';
         if (e.target === e.currentTarget) {
-            setDropTarget({ column: columnKey, overId: null, before: false, isGroup: false });
+            setDropTarget(prev => {
+                // Don't clear a card-level target — the indicator's
+                // pointer-events:none can pass events to the column body.
+                if (prev && prev.column === columnKey && prev.overId) return prev;
+                if (prev && prev.column === columnKey && prev.overId === null && !prev.isGroup) return prev;
+                return { column: columnKey, overId: null, before: false, isGroup: false };
+            });
         }
     }
 
@@ -569,6 +594,7 @@ export default function BoardView({ boardId, highlightActionId, navigate, showTo
             return;
         }
         const dt = dropTarget;
+        const droppedId = drag.type === 'group' ? drag.groupId : drag.id;
 
         if (drag.type === 'action') {
             handleActionDrop(drag, dt);
@@ -579,6 +605,35 @@ export default function BoardView({ boardId, highlightActionId, navigate, showTo
         }
 
         onDragEnd();
+        setJustDroppedId(droppedId);
+        setTimeout(() => setJustDroppedId(null), 400);
+    }
+
+    function assignOrder(items) {
+        return items.map((item, i) => ({ ...item, order__c: String(i + 1) }));
+    }
+
+    function assignFeedbackOrder(items) {
+        const counters = {};
+        return items.map(f => {
+            const cat = f.category__c;
+            counters[cat] = (counters[cat] || 0) + 1;
+            return { ...f, order__c: String(counters[cat]) };
+        });
+    }
+
+    function persistOrder(items, objectName) {
+        const updates = items
+            .map((item, idx) => ({ item, newOrder: String(idx + 1) }))
+            .filter(({ item, newOrder }) => String(item.order__c) !== newOrder);
+        if (updates.length === 0) return;
+        Promise.all(
+            updates.map(({ item, newOrder }) =>
+                update(objectName, item.id, { order__c: newOrder })
+            )
+        ).catch(err => {
+            showToast('Failed to save order: ' + err.message, 'error');
+        });
     }
 
     function handleActionDrop(drag, dt) {
@@ -594,7 +649,8 @@ export default function BoardView({ boardId, highlightActionId, navigate, showTo
         }
         const newList = [...rest];
         newList.splice(insertIdx, 0, item);
-        setActions(newList);
+        persistOrder(newList, 'retro_action__c');
+        setActions(assignOrder(newList));
     }
 
     function handleGroupDrop(drag, columnKey, dt) {
@@ -631,9 +687,12 @@ export default function BoardView({ boardId, highlightActionId, navigate, showTo
 
         const newList = [...rest];
         newList.splice(insertIdx, 0, ...moved);
-        setFeedback(newList);
 
+        const destItems = newList.filter(f => f.category__c === columnKey);
+        persistOrder(destItems, 'retro_feedback__c');
         if (categoryChanged) {
+            const srcItems = newList.filter(f => f.category__c === drag.category);
+            persistOrder(srcItems, 'retro_feedback__c');
             Promise.all(groupItems.map(f =>
                 update('retro_feedback__c', f.id, { category__c: columnKey })
             )).catch(err => {
@@ -641,6 +700,8 @@ export default function BoardView({ boardId, highlightActionId, navigate, showTo
                 loadData();
             });
         }
+
+        setFeedback(assignFeedbackOrder(newList));
     }
 
     function handleFeedbackDrop(drag, columnKey, dt) {
@@ -692,7 +753,15 @@ export default function BoardView({ boardId, highlightActionId, navigate, showTo
         const updatedItem = { ...item, category__c: newCategory, group__c: newGroupId };
         const newList = [...rest];
         newList.splice(insertIdx, 0, updatedItem);
-        setFeedback(newList);
+
+        const destItems = newList.filter(f => f.category__c === newCategory);
+        persistOrder(destItems, 'retro_feedback__c');
+        if (drag.category !== newCategory) {
+            const srcItems = newList.filter(f => f.category__c === drag.category);
+            persistOrder(srcItems, 'retro_feedback__c');
+        }
+
+        setFeedback(assignFeedbackOrder(newList));
 
         const updates = {};
         if (drag.category !== newCategory) updates.category__c = newCategory;
@@ -788,6 +857,7 @@ export default function BoardView({ boardId, highlightActionId, navigate, showTo
                                                         columnKey={cat.key}
                                                         dragging={dragging}
                                                         dropTarget={dropTarget}
+                                                        justDroppedId={justDroppedId}
                                                         userVotes={userVotes}
                                                         currentUserId={currentUserId}
                                                         selectedIds={selectedIds}
@@ -813,29 +883,25 @@ export default function BoardView({ boardId, highlightActionId, navigate, showTo
                                             );
                                         }
                                         const item = entry.item;
+                                        const isDropTarget = dropTarget?.column === cat.key && dropTarget?.overId === item.id && !dropTarget?.isGroup;
                                         return (
-                                            <React.Fragment key={item.id}>
-                                                {dropTarget?.column === cat.key && dropTarget?.overId === item.id && !dropTarget?.isGroup && dropTarget?.before && (
-                                                    <div className="vault-drop-indicator" />
-                                                )}
-                                                <FeedbackCard
-                                                    item={item}
-                                                    authorName={userName(item, 'author')}
-                                                    isVoted={!!userVotes[item.id]}
-                                                    onVote={() => toggleVote(item.id)}
-                                                    canVote={!!currentUserId}
-                                                    selected={selectedIds.has(item.id)}
-                                                    onClick={(e) => handleCardClick(e, item)}
-                                                    onContextMenu={(e) => handleCardContextMenu(e, item)}
-                                                    isDragging={dragging?.id === item.id}
-                                                    onDragStart={() => onDragStart({ type: 'feedback', id: item.id, category: item.category__c, fromGroupId: null })}
-                                                    onDragOver={(e) => onCardDragOver(e, cat.key, item.id)}
-                                                    onDragEnd={onDragEnd}
-                                                />
-                                                {dropTarget?.column === cat.key && dropTarget?.overId === item.id && !dropTarget?.isGroup && !dropTarget?.before && (
-                                                    <div className="vault-drop-indicator" />
-                                                )}
-                                            </React.Fragment>
+                                            <FeedbackCard
+                                                key={item.id}
+                                                item={item}
+                                                authorName={userName(item, 'author')}
+                                                isVoted={!!userVotes[item.id]}
+                                                onVote={() => toggleVote(item.id)}
+                                                canVote={!!currentUserId}
+                                                selected={selectedIds.has(item.id)}
+                                                dropPosition={isDropTarget ? (dropTarget.before ? 'before' : 'after') : null}
+                                                justDropped={item.id === justDroppedId}
+                                                onClick={(e) => handleCardClick(e, item)}
+                                                onContextMenu={(e) => handleCardContextMenu(e, item)}
+                                                isDragging={dragging?.id === item.id}
+                                                onDragStart={() => onDragStart({ type: 'feedback', id: item.id, category: item.category__c, fromGroupId: null })}
+                                                onDragOver={(e) => onCardDragOver(e, cat.key, item.id)}
+                                                onDragEnd={onDragEnd}
+                                            />
                                         );
                                     })
                                 )}
@@ -879,27 +945,25 @@ export default function BoardView({ boardId, highlightActionId, navigate, showTo
                                 {actions.length === 0 && !isDragOver ? (
                                     <div className="vault-empty vault-text-small" style={{ padding: 16 }}>No action items yet</div>
                                 ) : (
-                                    actions.map(a => (
-                                        <React.Fragment key={a.id}>
-                                            {dropTarget?.column === 'action' && dropTarget?.overId === a.id && dropTarget?.before && (
-                                                <div className="vault-drop-indicator" />
-                                            )}
+                                    actions.map(a => {
+                                        const isDropTarget = dropTarget?.column === 'action' && dropTarget?.overId === a.id;
+                                        return (
                                             <ActionCard
+                                                key={a.id}
                                                 item={a}
                                                 assigneeName={a['assignee__cr.name__v'] || null}
                                                 statusLabel={actionStatusLabel(a.status__c)}
                                                 highlighted={a.id === highlightActionId}
+                                                dropPosition={isDropTarget ? (dropTarget.before ? 'before' : 'after') : null}
+                                                justDropped={a.id === justDroppedId}
                                                 onClick={() => openEditAction(a)}
                                                 isDragging={dragging?.id === a.id}
                                                 onDragStart={() => onDragStart({ type: 'action', id: a.id })}
                                                 onDragOver={(e) => onCardDragOver(e, 'action', a.id)}
                                                 onDragEnd={onDragEnd}
                                             />
-                                            {dropTarget?.column === 'action' && dropTarget?.overId === a.id && !dropTarget?.before && (
-                                                <div className="vault-drop-indicator" />
-                                            )}
-                                        </React.Fragment>
-                                    ))
+                                        );
+                                    })
                                 )}
                                 {dropTarget?.column === 'action' && !dropTarget?.overId && (
                                     <div className="vault-drop-indicator" />
@@ -1071,7 +1135,7 @@ export default function BoardView({ boardId, highlightActionId, navigate, showTo
 
 function GroupCard({
     groupId, items, columnKey,
-    dragging, dropTarget,
+    dragging, dropTarget, justDroppedId,
     userVotes, currentUserId, selectedIds,
     onToggleVote, onCardClick, onCardContextMenu, onGroupContextMenu,
     onCardDragStart, onGroupDragStart,
@@ -1105,7 +1169,8 @@ function GroupCard({
             className={
                 'vault-group-card' +
                 (isDraggingThis ? ' vault-group-card--dragging' : '') +
-                (isJoinTarget ? ' vault-group-card--join-target' : '')
+                (isJoinTarget ? ' vault-group-card--join-target' : '') +
+                (groupId === justDroppedId ? ' vault-card--just-dropped' : '')
             }
             onDragOver={(e) => onGroupDragOver(e, columnKey, groupId)}
             onContextMenu={(e) => onGroupContextMenu(e, groupId)}
@@ -1151,18 +1216,19 @@ function GroupCard({
                 )}
             </div>
             <div className="vault-group-card__items">
-                {items.map(item => (
-                    <React.Fragment key={item.id}>
-                        {dropTarget?.overId === item.id && !dropTarget?.isGroup && dropTarget?.before && (
-                            <div className="vault-drop-indicator" />
-                        )}
+                {items.map(item => {
+                    const isDropTarget = dropTarget?.overId === item.id && !dropTarget?.isGroup;
+                    return (
                         <FeedbackCard
+                            key={item.id}
                             item={item}
                             authorName={item['author__cr.name__v'] || 'Unknown'}
                             isVoted={!!userVotes[item.id]}
                             onVote={() => onToggleVote(item.id)}
                             canVote={!!currentUserId}
                             selected={selectedIds.has(item.id)}
+                            dropPosition={isDropTarget ? (dropTarget.before ? 'before' : 'after') : null}
+                            justDropped={item.id === justDroppedId}
                             onClick={(e) => onCardClick(e, item)}
                             onContextMenu={(e) => onCardContextMenu(e, item)}
                             isDragging={dragging?.id === item.id}
@@ -1170,11 +1236,8 @@ function GroupCard({
                             onDragOver={(e) => onCardDragOver(e, columnKey, item.id)}
                             onDragEnd={onDragEnd}
                         />
-                        {dropTarget?.overId === item.id && !dropTarget?.isGroup && !dropTarget?.before && (
-                            <div className="vault-drop-indicator" />
-                        )}
-                    </React.Fragment>
-                ))}
+                    );
+                })}
             </div>
         </div>
     );
@@ -1213,7 +1276,7 @@ function ContextMenu({ x, y, children, onClose }) {
     );
 }
 
-function ActionCard({ item, assigneeName, statusLabel, highlighted, onClick, isDragging, onDragStart, onDragOver, onDragEnd }) {
+function ActionCard({ item, assigneeName, statusLabel, highlighted, dropPosition, justDropped, onClick, isDragging, onDragStart, onDragOver, onDragEnd }) {
     const cardRef = useRef(null);
 
     useEffect(() => {
@@ -1228,7 +1291,10 @@ function ActionCard({ item, assigneeName, statusLabel, highlighted, onClick, isD
             className={
                 'vault-action-card vault-action-card--clickable' +
                 (isDragging ? ' vault-action-card--dragging' : '') +
-                (highlighted ? ' vault-action-card--highlighted' : '')
+                (highlighted ? ' vault-action-card--highlighted' : '') +
+                (justDropped ? ' vault-card--just-dropped' : '') +
+                (dropPosition === 'before' ? ' vault-card--drop-before' : '') +
+                (dropPosition === 'after' ? ' vault-card--drop-after' : '')
             }
             draggable
             onClick={onClick}
@@ -1284,7 +1350,7 @@ function ActionCard({ item, assigneeName, statusLabel, highlighted, onClick, isD
     );
 }
 
-function FeedbackCard({ item, authorName, isVoted, onVote, canVote, selected, onClick, onContextMenu, isDragging, onDragStart, onDragOver, onDragEnd }) {
+function FeedbackCard({ item, authorName, isVoted, onVote, canVote, selected, dropPosition, justDropped, onClick, onContextMenu, isDragging, onDragStart, onDragOver, onDragEnd }) {
     const voteCount = parseInt(item.vote_count__c || 0, 10);
     const isKudos = item.category__c === 'kudos__c';
     const recipientName = isKudos
@@ -1296,7 +1362,10 @@ function FeedbackCard({ item, authorName, isVoted, onVote, canVote, selected, on
                 'vault-feedback-card vault-feedback-card--clickable' +
                 (isKudos ? ' vault-feedback-card--kudos' : '') +
                 (isDragging ? ' vault-feedback-card--dragging' : '') +
-                (selected ? ' vault-feedback-card--selected' : '')
+                (selected ? ' vault-feedback-card--selected' : '') +
+                (justDropped ? ' vault-card--just-dropped' : '') +
+                (dropPosition === 'before' ? ' vault-card--drop-before' : '') +
+                (dropPosition === 'after' ? ' vault-card--drop-after' : '')
             }
             draggable
             onClick={onClick}

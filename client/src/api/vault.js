@@ -153,9 +153,10 @@ export async function fetchFeedbackForBoard(boardId) {
     return query(
         "SELECT id, name__v, retro_board__c, author__c, author__cr.name__v, " +
         "category__c, content__c, theme__c, feature__c, vote_count__c, group__c, " +
-        "kudos_recipient__c, kudos_recipient__cr.name__v " +
+        "kudos_recipient__c, kudos_recipient__cr.name__v, order__c " +
         "FROM retro_feedback__c " +
-        `WHERE retro_board__c = '${escapeVql(boardId)}'`
+        `WHERE retro_board__c = '${escapeVql(boardId)}' ` +
+        "ORDER BY order__c ASC"
     );
 }
 
@@ -163,8 +164,9 @@ export async function fetchActionsForBoard(boardId) {
     return query(
         "SELECT id, name__v, retro_board__c, owner__c, owner__cr.name__v, " +
         "assignee__c, assignee__cr.name__v, " +
-        "status__c, due_date__c, completed_at__c FROM retro_action__c " +
-        `WHERE retro_board__c = '${escapeVql(boardId)}'`
+        "status__c, due_date__c, completed_at__c, order__c FROM retro_action__c " +
+        `WHERE retro_board__c = '${escapeVql(boardId)}' ` +
+        "ORDER BY order__c ASC"
     );
 }
 
