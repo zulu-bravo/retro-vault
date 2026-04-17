@@ -1073,6 +1073,13 @@
     fill: var(--vault-text-primary);
 }
 
+.vault-chart__tooltip-hint {
+    font-family: var(--vault-font-family);
+    font-size: 10px;
+    fill: var(--vault-text-secondary);
+    font-style: italic;
+}
+
 .vault-chart-legend {
     display: flex;
     flex-wrap: wrap;

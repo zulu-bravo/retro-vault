@@ -409,7 +409,7 @@ function buildSegments(points) {
 }
 
 function Tooltip({ x, y, hover, chartW }) {
-    const W = 200, H = 60;
+    const W = 220, H = 72;
     const onRight = x + W + 12 > chartW;
     const tx = onRight ? x - W - 12 : x + 12;
     const ty = Math.max(8, y - H / 2);
@@ -418,16 +418,20 @@ function Tooltip({ x, y, hover, chartW }) {
         <g className="vault-chart__tooltip" pointerEvents="none">
             <rect x={tx} y={ty} width={W} height={H} rx="4" className="vault-chart__tooltip-bg" />
             <text x={tx + 12} y={ty + 18} className="vault-chart__tooltip-title">
-                <tspan fill={hover.color}>● </tspan>{hover.teamName}
+                {hover.boardName || hover.release}
             </text>
-            <text x={tx + 12} y={ty + 36} className="vault-chart__tooltip-meta">
-                {hover.release} — <tspan className="vault-chart__tooltip-value">{hover.sentiment}%</tspan>
+            <text x={tx + 12} y={ty + 33} className="vault-chart__tooltip-meta">
+                <tspan fill={hover.color}>● </tspan>{hover.teamName} · {hover.release}
             </text>
-            <text x={tx + 12} y={ty + 52} className="vault-chart__tooltip-meta">
+            <text x={tx + 12} y={ty + 48} className="vault-chart__tooltip-meta">
+                <tspan className="vault-chart__tooltip-value">{hover.sentiment}%</tspan>
+                {'  '}
                 <tspan fill="var(--vault-success)">▲{hover.wwVotes || 0}</tspan>
                 {'  '}
                 <tspan fill="var(--vault-danger)">▼{hover.tiVotes || 0}</tspan>
-                {'  '}· click to drill down
+            </text>
+            <text x={tx + 12} y={ty + 64} className="vault-chart__tooltip-hint">
+                Click to view details
             </text>
         </g>
     );
