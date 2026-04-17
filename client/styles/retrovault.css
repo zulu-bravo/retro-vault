@@ -1132,31 +1132,6 @@
     vertical-align: middle;
 }
 
-/* Sentiment table cell — percentage + inline weighted ▲/▼ counts */
-.vault-chart-cell--clickable {
-    cursor: pointer;
-}
-
-.vault-chart-cell--clickable:hover {
-    background: var(--vault-silver-lightest) !important;
-}
-
-.vault-chart-cell__pct {
-    font-weight: var(--vault-font-weight-bold);
-    margin-right: var(--vault-space-2);
-}
-
-.vault-chart-cell__pos {
-    color: var(--vault-success);
-    font-size: var(--vault-font-size-xs);
-    margin-right: var(--vault-space-1);
-}
-
-.vault-chart-cell__neg {
-    color: var(--vault-danger);
-    font-size: var(--vault-font-size-xs);
-}
-
 /* Drill-down panel (Insights → board feedback detail) */
 .vault-drilldown__columns {
     display: grid;

@@ -123,7 +123,6 @@ export default function Insights({ showToast }) {
                         onShowAll={showAll}
                     />
                     <SentimentChart chart={{ ...chart, series: visibleSeries }} hover={hover} setHover={setHover} onSelect={handleDrillDown} />
-                    <SentimentTable chart={{ ...chart, series: visibleSeries }} onSelect={handleDrillDown} />
                 </div>
             </div>
 
@@ -410,12 +409,10 @@ function buildSegments(points) {
 }
 
 function Tooltip({ x, y, hover, chartW }) {
-    const W = 200, H = 78;
-    // Flip horizontally if tooltip would overflow the right side
+    const W = 200, H = 60;
     const onRight = x + W + 12 > chartW;
     const tx = onRight ? x - W - 12 : x + 12;
     const ty = Math.max(8, y - H / 2);
-    const voted = hover.totalVotes > 0;
 
     return (
         <g className="vault-chart__tooltip" pointerEvents="none">
@@ -426,55 +423,13 @@ function Tooltip({ x, y, hover, chartW }) {
             <text x={tx + 12} y={ty + 36} className="vault-chart__tooltip-meta">
                 {hover.release} — <tspan className="vault-chart__tooltip-value">{hover.sentiment}%</tspan>
             </text>
-            <text x={tx + 12} y={ty + 54} className="vault-chart__tooltip-meta">
-                {voted
-                    ? `${hover.wwVotes} of ${hover.totalVotes} votes positive`
-                    : `${hover.wwCount} of ${hover.totalCount} items positive`}
-            </text>
-            <text x={tx + 12} y={ty + 70} className="vault-chart__tooltip-meta">
-                {hover.totalCount} feedback item{hover.totalCount === 1 ? '' : 's'}{voted ? '' : ' (no votes)'}
+            <text x={tx + 12} y={ty + 52} className="vault-chart__tooltip-meta">
+                <tspan fill="var(--vault-success)">▲{hover.wwVotes || 0}</tspan>
+                {'  '}
+                <tspan fill="var(--vault-danger)">▼{hover.tiVotes || 0}</tspan>
+                {'  '}· click to drill down
             </text>
         </g>
-    );
-}
-
-function SentimentTable({ chart, onSelect }) {
-    const { releases, series } = chart;
-    return (
-        <table className="vault-table vault-mt-24">
-            <thead>
-                <tr>
-                    <th>Team</th>
-                    {releases.map(r => <th key={r}>{r}</th>)}
-                </tr>
-            </thead>
-            <tbody>
-                {series.map(s => (
-                    <tr key={s.teamId}>
-                        <td className="vault-text-bold">
-                            <span className="vault-chart-legend__swatch" style={{ background: s.color }} /> {s.teamName}
-                        </td>
-                        {s.points.map(p => {
-                            if (p.sentiment === null) {
-                                return <td key={p.release}>—</td>;
-                            }
-                            return (
-                                <td
-                                    key={p.release}
-                                    className="vault-chart-cell--clickable"
-                                    onClick={() => onSelect && onSelect(p, s.teamName, s.color)}
-                                    title="Click to see board feedback"
-                                >
-                                    <span className="vault-chart-cell__pct">{p.sentiment}%</span>
-                                    <span className="vault-chart-cell__pos" title="Weighted positive">▲{p.wwVotes || 0}</span>
-                                    <span className="vault-chart-cell__neg" title="Weighted negative">▼{p.tiVotes || 0}</span>
-                                </td>
-                            );
-                        })}
-                    </tr>
-                ))}
-            </tbody>
-        </table>
     );
 }
 
