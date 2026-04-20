@@ -4,19 +4,22 @@
 // Below the chart: a list of releases with inline-editable features.
 import React, { useEffect, useState, useMemo } from 'react';
 import {
-    fetchAllFeedback, fetchAllActions, fetchBoards, fetchTeams,
+    fetchAllFeedback, fetchBoards, fetchTeams,
     fetchReleases, fetchFeatures, fetchAllBoardFeatures,
     deleteFeature,
 } from '../api/vault';
 import Spinner, { EmptyState } from '../components/Spinner';
 
+// Team palette — deliberately avoids green / blue / orange because those
+// carry semantic meaning on the action-status bar (done / in progress /
+// not started). Purple, teal, rose read as team identifiers instead.
 const TEAM_PALETTE = [
-    'var(--vault-success)',
-    'var(--vault-primary)',
-    'var(--vault-orange-darkest)',
-    'var(--vault-danger)',
-    'var(--vault-gold-default)',
-    'var(--vault-text-secondary)',
+    '#6B46C1',  // purple
+    '#0D9488',  // teal
+    '#BE185D',  // rose
+    '#4C51BF',  // indigo
+    '#92400E',  // sienna
+    '#4B5563',  // slate
 ];
 
 export default function Releases({ showToast }) {
@@ -27,16 +30,15 @@ export default function Releases({ showToast }) {
     const [releases, setReleases] = useState([]);
     const [features, setFeatures] = useState([]);
     const [boardFeatures, setBoardFeatures] = useState([]);
-    const [actions, setActions] = useState([]);
     const [hover, setHover] = useState(null);
     const [hiddenTeams, setHiddenTeams] = useState(() => new Set());
 
     useEffect(() => {
         (async () => {
             try {
-                const [f, b, t, r, ft, bf, a] = await Promise.all([
+                const [f, b, t, r, ft, bf] = await Promise.all([
                     fetchAllFeedback(), fetchBoards(), fetchTeams(), fetchReleases(),
-                    fetchFeatures(), fetchAllBoardFeatures(), fetchAllActions(),
+                    fetchFeatures(), fetchAllBoardFeatures(),
                 ]);
                 setFeedback(f);
                 setBoards(b);
@@ -44,7 +46,6 @@ export default function Releases({ showToast }) {
                 setReleases(r);
                 setFeatures(ft);
                 setBoardFeatures(bf);
-                setActions(a);
             } catch (err) {
                 showToast && showToast('Failed to load releases: ' + err.message, 'error');
                 console.error(err);
@@ -147,7 +148,6 @@ export default function Releases({ showToast }) {
                 features={features}
                 feedback={feedback}
                 boardFeatures={boardFeatures}
-                actions={actions}
                 onDeleteFeature={handleDeleteFeature}
             />
         </>
@@ -439,23 +439,16 @@ function Tooltip({ hover, xPct, yPct, onOpenBoard, onMouseEnter, onMouseLeave })
 
 /* ---------- Release list (management) ---------- */
 
-function ReleaseListPanel({ releases, boards, teams, features, feedback, boardFeatures, actions, onDeleteFeature }) {
+function ReleaseListPanel({ releases, boards, teams, features, feedback, boardFeatures, onDeleteFeature }) {
     const teamNameById = new Map(teams.map(t => [t.id, t.name__v]));
     const boardById = new Map(boards.map(b => [b.id, b]));
 
-    // (releaseId|teamId) -> { done, inProgress, open, total }
-    const actionsByRelTeam = new Map();
-    for (const a of actions || []) {
-        const board = boardById.get(a.retro_board__c);
-        if (!board || !board.release__c || !board.team__c) continue;
-        const key = `${board.release__c}|${board.team__c}`;
-        if (!actionsByRelTeam.has(key)) actionsByRelTeam.set(key, { done: 0, inProgress: 0, open: 0, total: 0 });
-        const bucket = actionsByRelTeam.get(key);
-        bucket.total += 1;
-        if (a.status__c === 'done__c') bucket.done += 1;
-        else if (a.status__c === 'in_progress__c') bucket.inProgress += 1;
-        else bucket.open += 1;
-    }
+    // Stable team ordering + palette (same palette as the sentiment chart).
+    const sortedTeams = [...teams].sort((a, b) => (a.name__v || '').localeCompare(b.name__v || ''));
+    const teamColorById = new Map();
+    sortedTeams.forEach((t, i) => {
+        teamColorById.set(t.id, TEAM_PALETTE[i % TEAM_PALETTE.length]);
+    });
 
     const boardCountByRelease = new Map();
     const releaseByBoard = new Map();
@@ -466,27 +459,31 @@ function ReleaseListPanel({ releases, boards, teams, features, feedback, boardFe
         }
     }
 
-    const featuresByRelease = new Map();
-    for (const f of features) {
-        if (!featuresByRelease.has(f.release__c)) featuresByRelease.set(f.release__c, []);
-        featuresByRelease.get(f.release__c).push(f);
-    }
-
-    // featureId -> Set<teamId> (teams that have a board working this feature)
+    // (releaseId|teamId) -> [features...]  only features linked to that team's board.
+    const featuresByRelTeam = new Map();
     const teamsByFeature = new Map();
-    // featureId -> count of junction rows (used by delete-guard)
     const junctionCountByFeature = new Map();
     for (const bf of boardFeatures || []) {
         const board = boardById.get(bf.retro_board__c);
         junctionCountByFeature.set(bf.retro_feature__c, (junctionCountByFeature.get(bf.retro_feature__c) || 0) + 1);
-        if (!board || !board.team__c) continue;
+        if (!board || !board.team__c || !board.release__c) continue;
         if (!teamsByFeature.has(bf.retro_feature__c)) teamsByFeature.set(bf.retro_feature__c, new Set());
         teamsByFeature.get(bf.retro_feature__c).add(board.team__c);
     }
 
-    // (releaseId|featureName) -> { ww, ti } using feedback.feature__c free-text
+    const featureById = new Map(features.map(f => [f.id, f]));
+    for (const [fid, teamIds] of teamsByFeature.entries()) {
+        const f = featureById.get(fid);
+        if (!f) continue;
+        for (const tid of teamIds) {
+            const key = `${f.release__c}|${tid}`;
+            if (!featuresByRelTeam.has(key)) featuresByRelTeam.set(key, []);
+            featuresByRelTeam.get(key).push(f);
+        }
+    }
+
+    // (releaseId|featureName) -> { ww, ti } for the inline feedback counts.
     const countsByRelFeature = new Map();
-    // featureId-equivalent key (releaseId|name) -> total feedback references
     const feedbackRefs = new Map();
     for (const fi of feedback || []) {
         const featureName = fi.feature__c;
@@ -503,6 +500,11 @@ function ReleaseListPanel({ releases, boards, teams, features, feedback, boardFe
         else c.ti += 1;
     }
 
+    const featureCountByRelease = new Map();
+    for (const f of features) {
+        featureCountByRelease.set(f.release__c, (featureCountByRelease.get(f.release__c) || 0) + 1);
+    }
+
     return (
         <div className="vault-card vault-mb-24">
             <div className="vault-card__header">
@@ -512,19 +514,37 @@ function ReleaseListPanel({ releases, boards, teams, features, feedback, boardFe
                 {releases.length === 0 ? (
                     <EmptyState message="No releases yet. Create one when setting up a new board." />
                 ) : (
-                    <div className="vault-release-list">
+                    <div
+                        className="vault-release-matrix"
+                        role="table"
+                        style={{ '--team-count': sortedTeams.length }}
+                    >
+                        <div className="vault-release-matrix__row vault-release-matrix__row--header" role="row">
+                            <div className="vault-release-matrix__cell vault-release-matrix__cell--corner" role="columnheader">Release</div>
+                            {sortedTeams.map(t => (
+                                <div
+                                    key={t.id}
+                                    className="vault-release-matrix__cell vault-release-matrix__cell--team-header"
+                                    style={{ '--team-color': teamColorById.get(t.id) }}
+                                    role="columnheader"
+                                >
+                                    <span className="vault-team-group__swatch" aria-hidden="true" />
+                                    {t.name__v}
+                                </div>
+                            ))}
+                        </div>
                         {releases.map(r => (
-                            <ReleaseRow
+                            <ReleaseMatrixRow
                                 key={r.id}
                                 release={r}
                                 boardCount={boardCountByRelease.get(r.id) || 0}
-                                features={featuresByRelease.get(r.id) || []}
-                                teamsByFeature={teamsByFeature}
-                                teamNameById={teamNameById}
+                                featureCount={featureCountByRelease.get(r.id) || 0}
+                                teams={sortedTeams}
+                                teamColorById={teamColorById}
+                                featuresByRelTeam={featuresByRelTeam}
                                 junctionCountByFeature={junctionCountByFeature}
                                 countsByRelFeature={countsByRelFeature}
                                 feedbackRefs={feedbackRefs}
-                                actionsByRelTeam={actionsByRelTeam}
                                 onDeleteFeature={onDeleteFeature}
                             />
                         ))}
@@ -535,164 +555,99 @@ function ReleaseListPanel({ releases, boards, teams, features, feedback, boardFe
     );
 }
 
-function ReleaseRow({
-    release, boardCount, features,
-    teamsByFeature, teamNameById, junctionCountByFeature,
-    countsByRelFeature, feedbackRefs, actionsByRelTeam,
+function ReleaseMatrixRow({
+    release, boardCount, featureCount, teams, teamColorById,
+    featuresByRelTeam, junctionCountByFeature, countsByRelFeature, feedbackRefs,
     onDeleteFeature,
 }) {
-    // Native Vault object page for the release record — opens in a new tab.
     const releaseHref = `/ui/#object/retro_release__c/${encodeURIComponent(release.id)}`;
-
-    // Group features by team (same feature may appear under multiple teams).
-    // Features with no team-board link fall into "Unassigned".
-    const byTeam = new Map(); // teamId -> [feature, ...]
-    const unassigned = [];
-    for (const f of features) {
-        const teamIds = teamsByFeature.get(f.id);
-        if (!teamIds || teamIds.size === 0) {
-            unassigned.push(f);
-            continue;
-        }
-        for (const tid of teamIds) {
-            if (!byTeam.has(tid)) byTeam.set(tid, []);
-            byTeam.get(tid).push(f);
-        }
-    }
-
-    const orderedTeamIds = [...byTeam.keys()].sort((a, b) =>
-        (teamNameById.get(a) || a).localeCompare(teamNameById.get(b) || b));
-
     return (
-        <div className="vault-release-row">
-            <div className="vault-release-row__header">
-                <div>
-                    <a
-                        className="vault-release-row__name vault-release-row__name--link"
-                        href={releaseHref}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        title="Open release in Vault (new tab)"
-                    >
-                        {release.name__v}
-                    </a>
-                    <span className="vault-text-small vault-text-muted">
-                        {' · '}{boardCount} board{boardCount !== 1 ? 's' : ''}
-                        {' · '}{features.length} feature{features.length !== 1 ? 's' : ''}
-                    </span>
+        <div className="vault-release-matrix__row" role="row">
+            <div className="vault-release-matrix__cell vault-release-matrix__cell--release" role="rowheader">
+                <a
+                    className="vault-release-row__name vault-release-row__name--link"
+                    href={releaseHref}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    title="Open release in Vault (new tab)"
+                >
+                    {release.name__v}
+                </a>
+                <div className="vault-text-small vault-text-muted">
+                    {boardCount} board{boardCount !== 1 ? 's' : ''} · {featureCount} feature{featureCount !== 1 ? 's' : ''}
                 </div>
             </div>
-            {features.length === 0 ? (
-                <div className="vault-text-small vault-text-muted vault-mb-8">
-                    No features yet.
-                </div>
-            ) : (
-                <div className="vault-release-row__teams">
-                    {orderedTeamIds.map(tid => (
-                        <FeatureTeamGroup
-                            key={tid}
-                            teamLabel={teamNameById.get(tid) || 'Unknown team'}
-                            features={byTeam.get(tid)}
-                            releaseId={release.id}
-                            junctionCountByFeature={junctionCountByFeature}
-                            countsByRelFeature={countsByRelFeature}
-                            feedbackRefs={feedbackRefs}
-                            actionStats={actionsByRelTeam.get(`${release.id}|${tid}`)}
-                            onDeleteFeature={onDeleteFeature}
-                        />
-                    ))}
-                    {unassigned.length > 0 && (
-                        <FeatureTeamGroup
-                            teamLabel="Unassigned"
-                            subtle
-                            features={unassigned}
-                            releaseId={release.id}
-                            junctionCountByFeature={junctionCountByFeature}
-                            countsByRelFeature={countsByRelFeature}
-                            feedbackRefs={feedbackRefs}
-                            onDeleteFeature={onDeleteFeature}
-                        />
-                    )}
-                </div>
-            )}
+            {teams.map(t => {
+                const list = featuresByRelTeam.get(`${release.id}|${t.id}`) || [];
+                const color = teamColorById.get(t.id);
+                return (
+                    <div
+                        key={t.id}
+                        className="vault-release-matrix__cell vault-release-matrix__cell--feats"
+                        style={{ '--team-color': color }}
+                        role="cell"
+                    >
+                        {list.length === 0 ? (
+                            <span className="vault-release-matrix__empty">—</span>
+                        ) : (
+                            <FeatureChipList
+                                features={list}
+                                releaseId={release.id}
+                                junctionCountByFeature={junctionCountByFeature}
+                                countsByRelFeature={countsByRelFeature}
+                                feedbackRefs={feedbackRefs}
+                                onDeleteFeature={onDeleteFeature}
+                            />
+                        )}
+                    </div>
+                );
+            })}
         </div>
     );
 }
 
-function FeatureTeamGroup({
-    teamLabel, subtle, features, releaseId,
-    junctionCountByFeature, countsByRelFeature, feedbackRefs,
-    actionStats,
-    onDeleteFeature,
+function FeatureChipList({
+    features, releaseId, junctionCountByFeature, countsByRelFeature, feedbackRefs, onDeleteFeature,
 }) {
     const sorted = [...features].sort((a, b) =>
         (a.display_name__c || a.name__v).localeCompare(b.display_name__c || b.name__v));
-
     return (
-        <div className={'vault-team-group' + (subtle ? ' vault-team-group--subtle' : '')}>
-            <div className="vault-team-group__label">
-                <span className="vault-team-group__name">{teamLabel}</span>
-                {actionStats && actionStats.total > 0 && (
-                    <ActionProgress stats={actionStats} />
-                )}
-            </div>
-            <div className="vault-chip-list">
-                {sorted.map(f => {
-                    const name = f.display_name__c || f.name__v;
-                    const key = `${releaseId}|${name}`;
-                    const counts = countsByRelFeature.get(key) || { ww: 0, ti: 0 };
-                    const junctionCount = junctionCountByFeature.get(f.id) || 0;
-                    const feedbackCount = feedbackRefs.get(key) || 0;
-                    const inUse = junctionCount > 0 || feedbackCount > 0;
-                    const deleteTitle = inUse
-                        ? `In use — ${junctionCount} board${junctionCount === 1 ? '' : 's'}` +
-                          (feedbackCount ? `, ${feedbackCount} feedback item${feedbackCount === 1 ? '' : 's'}` : '') +
-                          '. Remove from boards first.'
-                        : 'Remove feature';
-                    return (
-                        <span key={f.id} className="vault-chip vault-chip--feature">
-                            <span className="vault-chip__label">{name}</span>
-                            {counts.ww > 0 && (
-                                <span className="vault-chip__count vault-chip__count--positive" title={`${counts.ww} Went Well`}>
-                                    +{counts.ww}
-                                </span>
-                            )}
-                            {counts.ti > 0 && (
-                                <span className="vault-chip__count vault-chip__count--negative" title={`${counts.ti} To Improve`}>
-                                    −{counts.ti}
-                                </span>
-                            )}
-                            <button
-                                type="button"
-                                aria-label={`Remove ${name}`}
-                                title={deleteTitle}
-                                disabled={inUse}
-                                onClick={() => onDeleteFeature(f.id, name)}
-                            >×</button>
-                        </span>
-                    );
-                })}
-            </div>
-        </div>
-    );
-}
-
-function ActionProgress({ stats }) {
-    const { done, inProgress, open, total } = stats;
-    const donePct = total > 0 ? (done / total) * 100 : 0;
-    const inProgressPct = total > 0 ? (inProgress / total) * 100 : 0;
-    const openPct = 100 - donePct - inProgressPct;
-    const pctDone = Math.round(donePct);
-    return (
-        <div className="vault-action-progress" title={`${done} done · ${inProgress} in progress · ${open} not started`}>
-            <div className="vault-action-progress__summary">
-                Actions: <strong>{done}/{total}</strong> done <span className="vault-text-muted">({pctDone}%)</span>
-            </div>
-            <div className="vault-action-progress__bar" role="progressbar" aria-valuenow={pctDone} aria-valuemin="0" aria-valuemax="100">
-                {done > 0 && <span className="vault-action-progress__seg vault-action-progress__seg--done" style={{ width: `${donePct}%` }} />}
-                {inProgress > 0 && <span className="vault-action-progress__seg vault-action-progress__seg--progress" style={{ width: `${inProgressPct}%` }} />}
-                {open > 0 && <span className="vault-action-progress__seg vault-action-progress__seg--open" style={{ width: `${openPct}%` }} />}
-            </div>
+        <div className="vault-chip-list">
+            {sorted.map(f => {
+                const name = f.display_name__c || f.name__v;
+                const key = `${releaseId}|${name}`;
+                const counts = countsByRelFeature.get(key) || { ww: 0, ti: 0 };
+                const junctionCount = junctionCountByFeature.get(f.id) || 0;
+                const feedbackCount = feedbackRefs.get(key) || 0;
+                const inUse = junctionCount > 0 || feedbackCount > 0;
+                const deleteTitle = inUse
+                    ? `In use — ${junctionCount} board${junctionCount === 1 ? '' : 's'}` +
+                      (feedbackCount ? `, ${feedbackCount} feedback item${feedbackCount === 1 ? '' : 's'}` : '') +
+                      '. Remove from boards first.'
+                    : 'Remove feature';
+                return (
+                    <span key={f.id} className="vault-chip vault-chip--feature vault-chip--team">
+                        <span className="vault-chip__label">{name}</span>
+                        {counts.ww > 0 && (
+                            <span className="vault-chip__count vault-chip__count--positive" title={`${counts.ww} Went Well`}>
+                                +{counts.ww}
+                            </span>
+                        )}
+                        {counts.ti > 0 && (
+                            <span className="vault-chip__count vault-chip__count--negative" title={`${counts.ti} To Improve`}>
+                                −{counts.ti}
+                            </span>
+                        )}
+                        <button
+                            type="button"
+                            aria-label={`Remove ${name}`}
+                            title={deleteTitle}
+                            disabled={inUse}
+                            onClick={() => onDeleteFeature(f.id, name)}
+                        >×</button>
+                    </span>
+                );
+            })}
         </div>
     );
 }
