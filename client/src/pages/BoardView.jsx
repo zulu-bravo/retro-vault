@@ -991,7 +991,7 @@ export default function BoardView({ boardId, highlightActionId, navigate, showTo
 
             {/* Feedback Modal */}
             {fbModal && (() => {
-                const boardFeatures = (board?.features__c || '')
+                const boardFeatures = (board?.['release__cr.features__c'] || '')
                     .split('\n')
                     .map(s => s.trim())
                     .filter(Boolean);

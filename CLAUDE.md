@@ -18,22 +18,26 @@ Repo: `zulu-bravo/retro-vault` on GitHub. Multiple collaborators work on differe
 
 ## Notable branches and what they contribute
 
-- `main` — integration branch. Merged features so far: Vault CRM design reskin, 3-column board, retro_ object prefix, drag/drop, action assignees, card grouping, group renaming, action item refinements, dashboard open-action count, refresh button, kudos column, two-tab native Vault split (Boards / Insights).
+- `main` — integration branch. Merged features so far: Vault CRM design reskin, 3-column board, retro_ object prefix, drag/drop, action assignees, card grouping, group renaming, action item refinements, dashboard open-action count, refresh button, kudos column, native Vault tabs for Boards / Actions / Insights.
 - `kudos-board` — Kudos column. Merged into main; some follow-up tweaks (column-order swap, gold card highlight removal) pushed.
 - `feature-insights-tab` — Two-tab Vault split (Boards + Insights as separate native Vault tabs). Merged into main as `004232a`.
-- `insights-release-sentiment` — Replaces the old three-panel Insights with a single multi-line release-sentiment chart. X-axis = releases A→Z (oldest left, newest right), Y-axis = vote-weighted Went Well share, with subtle green/red sentiment zones above 75% / below 25%, clickable legend (click to hide a team, double-click to isolate, "Show all" reset), and per-cell ▲/▼ counts in the companion table.
+- `insights-release-sentiment` — Replaces the old three-panel Insights with a single multi-line release-sentiment chart. X-axis = releases A→Z, Y-axis = vote-weighted Went Well share.
+- `release-teams-tabs` — Splits Insights into two dedicated tabs (Releases, Teams) and introduces a `retro_release__c` object that replaces the per-board `release_tag__c` + `features__c` with a shared release dimension. New tabs at orders 102 / 103.
 
 ## Deployment status
 
 The app is **deployed and working** on `align-veeva-productvaultcrm.veevavault.com`:
 
 - MDL data model created
-- Client distribution `Clientdistribution.retrovault__c` uploaded — now ships **two entries** (`dist/boards.js`, `dist/insights.js`) registered as two separate `Pageclientcode` bindings in `distribution-manifest.json`
+- Client distribution `Clientdistribution.retrovault__c` uploaded — ships **four entries** (`dist/boards.js`, `dist/actions.js`, `dist/releases.js`, `dist/teams.js`) registered as separate `Pageclientcode` bindings in `distribution-manifest.json`
 - `RetroVaultPageController` packaged and deployed via the Vault Java SDK Maven plugin
-- **Two Vault Pages**: `Page.retrovault__c` (Boards) and `Page.retrovault_insights__c` (Insights). Both bind to the same controller; each has its own `page_client_code` so its own JS bundle loads
-- **Two Vault Tabs**: `Tab.retrovault__c` (label "Boards", order 100) and `Tab.retrovault_insights__c` (label "Insights", order 101)
-- Boards URL: `https://align-veeva-productvaultcrm.veevavault.com/ui/#custom/page/retrovault`
-- Insights URL: `https://align-veeva-productvaultcrm.veevavault.com/ui/#custom/page/retrovault-insights` (note the dash — `url_path_name` cannot contain underscores)
+- **Four Vault Pages**, one per tab dimension. All bind to the same controller; each has its own `page_client_code` so its own JS bundle loads:
+  - `Page.retrovault__c` (Boards, url `retrovault`)
+  - `Page.retrovault_actions__c` (Actions, url `retrovault-actions`)
+  - `Page.retrovault_releases__c` (Releases, url `retrovault-releases`)
+  - `Page.retrovault_teams__c` (Teams, url `retrovault-teams`)
+- **Four Vault Tabs**: Boards (100), Actions (101), Releases (102), Teams (103). `url_path_name` cannot contain underscores — use dashes.
+- The old `Page.retrovault_insights__c` + `Tab.retrovault_insights__c` have been retired in favor of the split Releases + Teams tabs.
 
 **Seed data** present on the live Vault: 3 teams (Align, Campaign Manager, Network — IDs `VLQ000000001001-003`), 15 retro boards (3 teams × 5 releases: `26R1.0` active + `25R3.5` / `25R3.4` / `25R3.2` / `25R3.0` closed), ~90 feedback items, ~45 action items, ~6 kudos on active boards. Users used as facilitators/authors: Neal Mundy (`1121601`), Zied Belkhodja (`31435884`), Fernando Pingitore (`31435872`).
 
@@ -44,7 +48,7 @@ The app is **deployed and working** on `align-veeva-productvaultcrm.veevavault.c
   - Display names are pulled via dotted VQL on join (`facilitator__cr.name__v`, `author__cr.name__v`, `owner__cr.name__v`, `assignee__cr.name__v`, `kudos_recipient__cr.name__v`). The `userName(row, prefix)` helper in `vault.js` reads these joined values.
   - For listing/searching users (in `UserTypeAhead`) the client calls the Vault REST `/v25.1/objects/users` directly via `vaultApiClient.fetch()` — bypasses the SDK entirely. Results are cached in `_usersCache`.
   - For the current user's name, the same REST endpoint (`/v25.1/objects/users/me`) is hit on init in `loadCurrentUserName()`.
-- **Boards and Insights are two separate Vault Pages**, not inner-routed. The React app has two entry files (`boards.jsx`, `insights.jsx`) and two top-level shells (`App.jsx`, `App_Insights.jsx`). There is no NavBar component.
+- **Each tab is its own Vault Page**, not inner-routed. The React app has four entry files (`boards.jsx`, `actions.jsx`, `releases.jsx`, `teams.jsx`) and four top-level shells (`App.jsx`, `App_Actions.jsx`, `App_Releases.jsx`, `App_Teams.jsx`). There is no NavBar component.
 - **Theme field is `theme__c`** on `retro_feedback__c`. The *picklist* it references is named `ai_theme__c`. Don't confuse field name with picklist name.
 - **Vote uniqueness** is enforced in application logic (PageController), not MDL.
 - **Real deletes** are used for votes (no soft-delete flag).
@@ -64,12 +68,15 @@ The app is **deployed and working** on `align-veeva-productvaultcrm.veevavault.c
 retro_team__c
   name__v (String, required)
 
+retro_release__c
+  name__v (String, required)                 ← e.g. "26R1.0" (was previously release_tag__c on the board)
+  features__c (String, max_length 1500)      ← newline-separated feature list, shared across all boards linked to this release
+
 retro_board__c
   name__v (String, required)
   facilitator__c -> user__sys (required)
   team__c -> retro_team__c (required)        ← field name unchanged after object rename
-  release_tag__c (String)
-  features__c (String, max_length 1500)      ← newline-separated feature list, populated on create/edit
+  release__c -> retro_release__c             ← optional; the shared release dimension
   board_date__c (Date, required)
   status__c (Picklist: board_status__c, required)
 
@@ -169,64 +176,82 @@ The `pom.xml` declares two Veeva-hosted repos:
 
 Plugin version `24.1.0` is the latest published. SDK version is `25.1.4-release11722`.
 
-### Create the two Vault Pages
+### Create the four Vault Pages
 ```bash
-curl -L "https://$HOST/api/mdl/execute" -H "Content-Type: text/plain" -H "Authorization: $SESSION_ID" \
-    -d "RECREATE Page retrovault__c (
-        label('Boards'),
-        active(true),
-        client_distribution('Clientdistribution.retrovault__c'),
-        page_client_code('Pageclientcode.retrovault__c'),
-        page_controller('Pagecontroller.com.veeva.vault.custom.RetroVaultPageController'),
-        url_path_name('retrovault')
-    );"
-
-curl -L "https://$HOST/api/mdl/execute" -H "Content-Type: text/plain" -H "Authorization: $SESSION_ID" \
-    -d "RECREATE Page retrovault_insights__c (
-        label('Insights'),
-        active(true),
-        client_distribution('Clientdistribution.retrovault__c'),
-        page_client_code('Pageclientcode.retrovault_insights__c'),
-        page_controller('Pagecontroller.com.veeva.vault.custom.RetroVaultPageController'),
-        url_path_name('retrovault-insights')
-    );"
+for P in \
+    "retrovault__c|Boards|retrovault|retrovault__c" \
+    "retrovault_actions__c|Actions|retrovault-actions|retrovault_actions__c" \
+    "retrovault_releases__c|Releases|retrovault-releases|retrovault_releases__c" \
+    "retrovault_teams__c|Teams|retrovault-teams|retrovault_teams__c"; do
+    IFS='|' read -r NAME LABEL URL CODE <<< "$P"
+    curl -L "https://$HOST/api/mdl/execute" -H "Content-Type: text/plain" -H "Authorization: $SESSION_ID" \
+        -d "RECREATE Page $NAME (
+            label('$LABEL'),
+            active(true),
+            client_distribution('Clientdistribution.retrovault__c'),
+            page_client_code('Pageclientcode.$CODE'),
+            page_controller('Pagecontroller.com.veeva.vault.custom.RetroVaultPageController'),
+            url_path_name('$URL')
+        );"
+done
 ```
 
-### Create the two Tabs
+### Create the four Tabs
+```bash
+for T in \
+    "retrovault__c|Boards|100|retrovault__c" \
+    "retrovault_actions__c|Actions|101|retrovault_actions__c" \
+    "retrovault_releases__c|Releases|102|retrovault_releases__c" \
+    "retrovault_teams__c|Teams|103|retrovault_teams__c"; do
+    IFS='|' read -r NAME LABEL ORDER PAGE <<< "$T"
+    curl -L "https://$HOST/api/mdl/execute" -H "Content-Type: text/plain" -H "Authorization: $SESSION_ID" \
+        -d "RECREATE Tab $NAME (
+            active(true),
+            label('$LABEL'),
+            order($ORDER),
+            page('Page.$PAGE'),
+            url('https://\${Vault.domain}/ui/#custom/page/\${Page.url_path_name}')
+        );"
+done
+```
+
+### Retire the old Insights Page + Tab (one-time, on live Vault)
 ```bash
 curl -L "https://$HOST/api/mdl/execute" -H "Content-Type: text/plain" -H "Authorization: $SESSION_ID" \
-    -d "RECREATE Tab retrovault__c (
-        active(true),
-        label('Boards'),
-        order(100),
-        page('Page.retrovault__c'),
-        url('https://\${Vault.domain}/ui/#custom/page/\${Page.url_path_name}')
-    );"
-
+    -d "DROP Tab retrovault_insights__c;"
 curl -L "https://$HOST/api/mdl/execute" -H "Content-Type: text/plain" -H "Authorization: $SESSION_ID" \
-    -d "RECREATE Tab retrovault_insights__c (
-        active(true),
-        label('Insights'),
-        order(101),
-        page('Page.retrovault_insights__c'),
-        url('https://\${Vault.domain}/ui/#custom/page/\${Page.url_path_name}')
-    );"
+    -d "DROP Page retrovault_insights__c;"
+```
+
+### Migrate data from release_tag__c + features__c to retro_release__c
+```bash
+# After MDL deploy (which adds retro_release__c + release__c on board),
+# populate releases from existing board data, then drop the old fields.
+python3 scripts/migrate_releases.py
+
+curl -X POST -H "Authorization: $SESSION_ID" -H "Content-Type: text/plain" \
+    --data-binary @scripts/migration/drop_old_board_fields.mdl \
+    "https://$HOST/api/mdl/execute"
 ```
 
 ## Key files
 
 - `mdl/00_picklists.mdl` - All picklist definitions (deploy first). Includes the `kudos__c` value on `feedback_category__c`.
-- `mdl/01_team.mdl` … `mdl/05_vote.mdl` - Object MDL files. Each is `RECREATE Object` shell + N `ALTER Object add Field` (the inline pattern doesn't work — see gotchas).
-- `client/distribution-manifest.json` - Two pages registered: `retrovault__c` → `dist/boards.js`, `retrovault_insights__c` → `dist/insights.js`.
-- `client/esbuild.mjs` - Builds both entries (`src/boards.jsx`, `src/insights.jsx`).
-- `client/src/boards.jsx` / `client/src/insights.jsx` - Two `definePage()` entry points.
+- `mdl/01_team.mdl` … `mdl/06_vote.mdl` - Object MDL files. Deployed in filename order so references resolve (team, release, board, feedback, action, vote). Each is `RECREATE Object` shell + N `ALTER Object add Field`.
+- `client/distribution-manifest.json` - Four pages registered: `retrovault__c`, `retrovault_actions__c`, `retrovault_releases__c`, `retrovault_teams__c`.
+- `client/esbuild.mjs` - Builds four entries (`src/boards.jsx`, `src/actions.jsx`, `src/releases.jsx`, `src/teams.jsx`).
+- `client/src/boards.jsx` / `client/src/actions.jsx` / `client/src/releases.jsx` / `client/src/teams.jsx` - Four `definePage()` entry points.
 - `client/src/App.jsx` - Boards-side root (Dashboard / BoardView / CreateBoard / SeedData routing).
-- `client/src/App_Insights.jsx` - Insights-side root (renders only `<Insights>`).
-- `client/src/api/vault.js` - `sendEvent` wrapper, `userName(row, prefix)` helper, `searchUsers()` and `loadCurrentUserName()` via `vaultApiClient.fetch`.
+- `client/src/App_Actions.jsx` / `App_Releases.jsx` / `App_Teams.jsx` - Single-view shells for the other three tabs.
+- `client/src/api/vault.js` - `sendEvent` wrapper, `userName(row, prefix)` helper, `searchUsers()` and `loadCurrentUserName()` via `vaultApiClient.fetch`, plus `fetchReleases` / `createRelease` / `updateRelease` helpers.
 - `client/src/components/UserTypeAhead.jsx` - Type-ahead user picker (used for facilitator, assignee, kudos recipient).
-- `client/src/pages/BoardView.jsx` - Most complex page: 4-column layout (Kudos | Went Well | To Improve | Action Items), drag-and-drop, grouping, kudos modal variant.
-- `client/src/pages/Insights.jsx` - Release Sentiment chart (multi-line SVG, vote-weighted Went Well share per team per release). Renders `<Insights>` from the `insights.jsx` entry / `App_Insights.jsx` shell on the Insights tab. The earlier Recurring Blockers / Action Item Completion / Team Sentiment panels were removed — see `insights-release-sentiment` branch.
-- `client/src/pages/SeedData.jsx` - Demo data seeder.
+- `client/src/pages/BoardView.jsx` - Most complex page: 4-column layout (Kudos | Went Well | To Improve | Action Items), drag-and-drop, grouping, kudos modal variant. Reads features via the joined `release__cr.features__c`.
+- `client/src/pages/CreateBoard.jsx` - Board form; release picker (existing release dropdown + "+ New release…" inline form). Features are edited on the Releases tab, not here.
+- `client/src/pages/Releases.jsx` - Release Sentiment chart (multi-line SVG, vote-weighted Went Well share per team per release) + a release list with inline-editable features. Served via `retrovault_releases__c` Page / Tab.
+- `client/src/pages/Teams.jsx` - Star Performers grouped per team (podium + rest table per team). Served via `retrovault_teams__c` Page / Tab.
+- `client/src/pages/SeedData.jsx` - Demo data seeder (now creates releases first, then links boards).
+- `scripts/migrate_releases.py` - One-time data migration: existing `release_tag__c` / `features__c` on boards → new `retro_release__c` records + `release__c` join. Features across boards with the same tag are unioned (unique non-blank lines).
+- `scripts/migration/drop_old_board_fields.mdl` - MDL to drop `release_tag__c` + `features__c` from `retro_board__c` after migration is verified.
 - `server/src/main/java/com/veeva/vault/custom/RetroVaultPageController.java` - onLoad + onEvent dispatch.
 
 ## Vault Java SDK constraints (learned the hard way)

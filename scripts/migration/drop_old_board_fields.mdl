@@ -1,0 +1,7 @@
+ALTER Object retro_board__c (
+    drop Field release_tag__c
+);
+
+ALTER Object retro_board__c (
+    drop Field features__c
+);

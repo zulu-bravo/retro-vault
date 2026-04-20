@@ -1,8 +1,10 @@
 import React, { useEffect, useState } from 'react';
-import { fetchTeams, fetchBoard, create, update, getCurrentUserId, getCurrentUserName, userName } from '../api/vault';
+import { fetchTeams, fetchReleases, fetchBoard, create, update, createRelease, getCurrentUserId, getCurrentUserName, userName } from '../api/vault';
 import Spinner from '../components/Spinner';
 import UserTypeAhead from '../components/UserTypeAhead';
 import { toISODate } from '../utils/format';
+
+const NEW_RELEASE = '__new__';
 
 export default function CreateBoard({ boardId, navigate, showToast }) {
     const isEdit = !!boardId;
@@ -10,34 +12,37 @@ export default function CreateBoard({ boardId, navigate, showToast }) {
     const currentUserName = getCurrentUserName();
     const [loading, setLoading] = useState(true);
     const [teams, setTeams] = useState([]);
+    const [releases, setReleases] = useState([]);
     const [submitting, setSubmitting] = useState(false);
 
     const [name, setName] = useState('');
     const [teamId, setTeamId] = useState('');
     const [facilitatorId, setFacilitatorId] = useState('');
     const [facilitatorDisplay, setFacilitatorDisplay] = useState('');
-    const [releaseTag, setReleaseTag] = useState('');
+    const [releaseId, setReleaseId] = useState('');           // existing release id, NEW_RELEASE, or ''
+    const [newReleaseName, setNewReleaseName] = useState('');
+    const [newReleaseFeatures, setNewReleaseFeatures] = useState('');
     const [boardDate, setBoardDate] = useState(toISODate(new Date()));
     const [status, setStatus] = useState('active__c');
-    const [features, setFeatures] = useState('');
 
     useEffect(() => {
         (async () => {
             try {
-                const [t, existing] = await Promise.all([
+                const [t, r, existing] = await Promise.all([
                     fetchTeams(),
+                    fetchReleases(),
                     isEdit ? fetchBoard(boardId) : Promise.resolve(null)
                 ]);
                 setTeams(t);
+                setReleases(r);
                 if (existing) {
                     setName(existing.name__v || '');
                     setTeamId(existing.team__c || '');
                     setFacilitatorId(existing.facilitator__c || currentUserId || '');
                     setFacilitatorDisplay(userName(existing, 'facilitator') || currentUserName || currentUserId || '');
-                    setReleaseTag(existing.release_tag__c || '');
+                    setReleaseId(existing.release__c || '');
                     setBoardDate(existing.board_date__c || toISODate(new Date()));
                     setStatus(existing.status__c || 'active__c');
-                    setFeatures(existing.features__c || '');
                 } else {
                     setFacilitatorId(currentUserId || '');
                     setFacilitatorDisplay(currentUserName || currentUserId || '');
@@ -50,22 +55,33 @@ export default function CreateBoard({ boardId, navigate, showToast }) {
         })();
     }, [boardId]);
 
+    const selectedRelease = releases.find(r => r.id === releaseId);
+    const isNewRelease = releaseId === NEW_RELEASE;
+
     async function handleSubmit(e) {
         e.preventDefault();
         if (!name || !teamId || !facilitatorId || !boardDate) {
             showToast('Please fill in all required fields.', 'error');
             return;
         }
+        if (isNewRelease && !newReleaseName.trim()) {
+            showToast('Please enter a name for the new release.', 'error');
+            return;
+        }
         setSubmitting(true);
         try {
+            let finalReleaseId = releaseId && releaseId !== NEW_RELEASE ? releaseId : null;
+            if (isNewRelease) {
+                finalReleaseId = await createRelease(newReleaseName.trim(), newReleaseFeatures);
+            }
+
             const fields = {
                 name__v: name,
                 team__c: teamId,
                 facilitator__c: facilitatorId,
                 board_date__c: boardDate,
                 status__c: status,
-                release_tag__c: releaseTag || null,
-                features__c: features || null
+                release__c: finalReleaseId,
             };
 
             if (isEdit) {
@@ -135,15 +151,60 @@ export default function CreateBoard({ boardId, navigate, showToast }) {
                         </div>
 
                         <div className="vault-form-group">
-                            <label className="vault-label">Release Tag</label>
-                            <input
-                                className="vault-input"
-                                type="text"
-                                placeholder="e.g., v2.4.1"
-                                value={releaseTag}
-                                onChange={(e) => setReleaseTag(e.target.value)}
-                            />
+                            <label className="vault-label">Release</label>
+                            <select
+                                className="vault-select"
+                                value={releaseId}
+                                onChange={(e) => setReleaseId(e.target.value)}
+                            >
+                                <option value="">No release</option>
+                                {releases.map(r => (
+                                    <option key={r.id} value={r.id}>{r.name__v}</option>
+                                ))}
+                                <option value={NEW_RELEASE}>+ New release…</option>
+                            </select>
+                            <div className="vault-text-small vault-text-muted">
+                                Releases are shared across teams. Edit features on the Releases tab.
+                            </div>
                         </div>
+
+                        {isNewRelease && (
+                            <>
+                                <div className="vault-form-group">
+                                    <label className="vault-label">New Release Name *</label>
+                                    <input
+                                        className="vault-input"
+                                        type="text"
+                                        placeholder="e.g., 26R1.0"
+                                        value={newReleaseName}
+                                        onChange={(e) => setNewReleaseName(e.target.value)}
+                                    />
+                                </div>
+                                <div className="vault-form-group">
+                                    <label className="vault-label">Features</label>
+                                    <textarea
+                                        className="vault-textarea"
+                                        placeholder={'One feature per line, e.g.\nCheckout redesign\nSearch v2\nOnboarding flow'}
+                                        value={newReleaseFeatures}
+                                        onChange={(e) => setNewReleaseFeatures(e.target.value)}
+                                        rows={6}
+                                    />
+                                    <div className="vault-text-small vault-text-muted">
+                                        Feedback authors will pick from this list when adding items.
+                                    </div>
+                                </div>
+                            </>
+                        )}
+
+                        {!isNewRelease && selectedRelease && selectedRelease.features__c && (
+                            <div className="vault-form-group">
+                                <label className="vault-label">Features (from {selectedRelease.name__v})</label>
+                                <pre className="vault-release-preview">{selectedRelease.features__c}</pre>
+                                <div className="vault-text-small vault-text-muted">
+                                    Edit features on the Releases tab.
+                                </div>
+                            </div>
+                        )}
 
                         <div className="vault-form-group">
                             <label className="vault-label">Board Date *</label>
@@ -154,20 +215,6 @@ export default function CreateBoard({ boardId, navigate, showToast }) {
                                 onChange={(e) => setBoardDate(e.target.value)}
                                 required
                             />
-                        </div>
-
-                        <div className="vault-form-group">
-                            <label className="vault-label">Features</label>
-                            <textarea
-                                className="vault-textarea"
-                                placeholder={'One feature per line, e.g.\nCheckout redesign\nSearch v2\nOnboarding flow'}
-                                value={features}
-                                onChange={(e) => setFeatures(e.target.value)}
-                                rows={6}
-                            />
-                            <div className="vault-text-small vault-text-muted">
-                                Feedback authors will pick from this list when adding items.
-                            </div>
                         </div>
 
                         {isEdit && (

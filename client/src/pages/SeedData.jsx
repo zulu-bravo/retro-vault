@@ -36,12 +36,26 @@ export default function SeedData({ navigate, showToast }) {
                 append(`  Created team: ${t.name__v}`, 'success');
             }
 
+            append('\nCreating releases...', 'info');
+            const releaseData = [
+                { name__v: 'v2.3.0', features__c: 'Checkout redesign\nSearch v2' },
+                { name__v: 'v2.4.0', features__c: 'Onboarding flow\nDashboard widgets' },
+                { name__v: 'v3.0.0', features__c: 'Architecture overhaul\nAPI v3 rollout' },
+                { name__v: 'v2.4.1-hotfix', features__c: 'Emergency auth patch' },
+            ];
+            const releaseIds = [];
+            for (const rd of releaseData) {
+                const id = await create('retro_release__c', rd);
+                releaseIds.push(id);
+                append(`  Created release: ${rd.name__v}`, 'success');
+            }
+
             append('\nCreating retro boards...', 'info');
             const boardData = [
-                { name__v: 'Sprint 10 Retro', team: 0, fac: 0, tag: 'v2.3.0', date: '2026-01-10', status: 'closed__c' },
-                { name__v: 'Sprint 11 Retro', team: 0, fac: 1, tag: 'v2.4.0', date: '2026-01-24', status: 'closed__c' },
-                { name__v: 'Sprint 12 Retro', team: 1, fac: 3, tag: 'v3.0.0', date: '2026-02-07', status: 'closed__c' },
-                { name__v: 'Hotfix Post-Mortem', team: 2, fac: 6, tag: 'v2.4.1-hotfix', date: '2026-02-14', status: 'active__c' }
+                { name__v: 'Sprint 10 Retro', team: 0, fac: 0, release: 0, date: '2026-01-10', status: 'closed__c' },
+                { name__v: 'Sprint 11 Retro', team: 0, fac: 1, release: 1, date: '2026-01-24', status: 'closed__c' },
+                { name__v: 'Sprint 12 Retro', team: 1, fac: 3, release: 2, date: '2026-02-07', status: 'closed__c' },
+                { name__v: 'Hotfix Post-Mortem', team: 2, fac: 6, release: 3, date: '2026-02-14', status: 'active__c' }
             ];
             const boardIds = [];
             for (const bd of boardData) {
@@ -49,7 +63,7 @@ export default function SeedData({ navigate, showToast }) {
                     name__v: bd.name__v,
                     team__c: teamIds[bd.team],
                     facilitator__c: u[bd.fac].id,
-                    release_tag__c: bd.tag,
+                    release__c: releaseIds[bd.release],
                     board_date__c: bd.date,
                     status__c: bd.status
                 });
@@ -140,7 +154,7 @@ export default function SeedData({ navigate, showToast }) {
             append(`  Created ${voteCount} votes`, 'success');
 
             append('\n=== SEED COMPLETE ===', 'success');
-            append(`3 teams, 4 boards, 24 feedback items, 10 action items, ${voteCount} votes`, 'success');
+            append(`3 teams, 4 releases, 4 boards, 24 feedback items, 10 action items, ${voteCount} votes`, 'success');
             showToast('Seed complete!', 'success');
         } catch (err) {
             append(`\nERROR: ${err.message}`, 'error');
@@ -163,8 +177,8 @@ export default function SeedData({ navigate, showToast }) {
             <div className="vault-card vault-mb-24">
                 <div className="vault-card__body">
                     <p className="vault-mb-16">
-                        This will create 3 teams, 4 retro boards, 24 feedback items, 10 action items,
-                        and ~80 votes using existing Vault users.
+                        This will create 3 teams, 4 releases, 4 retro boards, 24 feedback items,
+                        10 action items, and ~80 votes using existing Vault users.
                     </p>
                     <button className="vault-btn vault-btn--primary" onClick={runSeed} disabled={running}>
                         {running ? 'Running...' : 'Run Seed'}

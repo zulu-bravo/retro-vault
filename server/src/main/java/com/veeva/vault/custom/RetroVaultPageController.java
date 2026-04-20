@@ -365,6 +365,7 @@ public class RetroVaultPageController implements PageController {
     private boolean isAllowedObject(String objectName) {
         if (objectName == null) return false;
         return "retro_team__c".equals(objectName)
+                || "retro_release__c".equals(objectName)
                 || "retro_board__c".equals(objectName)
                 || "retro_feedback__c".equals(objectName)
                 || "retro_action__c".equals(objectName)
@@ -375,6 +376,7 @@ public class RetroVaultPageController implements PageController {
     private void assertVqlWhitelisted(String vql) {
         String upper = vql.toUpperCase();
         if (upper.contains(" FROM RETRO_TEAM__C")
+                || upper.contains(" FROM RETRO_RELEASE__C")
                 || upper.contains(" FROM RETRO_BOARD__C")
                 || upper.contains(" FROM RETRO_FEEDBACK__C")
                 || upper.contains(" FROM RETRO_ACTION__C")

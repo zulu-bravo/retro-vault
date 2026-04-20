@@ -83,8 +83,8 @@ export default function Dashboard({ navigate, showToast }) {
                                                     <StatusBadge status={board.status__c} />
                                                 </div>
                                                 <div className="vault-board-card__meta">
-                                                    {board.release_tag__c && (
-                                                        <span className="vault-board-card__meta-item">{board.release_tag__c}</span>
+                                                    {board['release__cr.name__v'] && (
+                                                        <span className="vault-board-card__meta-item">{board['release__cr.name__v']}</span>
                                                     )}
                                                     <span className="vault-board-card__meta-item">{formatDate(board.board_date__c)}</span>
                                                 </div>

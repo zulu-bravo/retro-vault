@@ -1550,3 +1550,48 @@
 .vault-text-small { font-size: var(--vault-font-size-sm); }
 .vault-text-bold { font-weight: var(--vault-font-weight-semibold); }
 .vault-hidden { display: none !important; }
+
+/* ---------- Release list (Releases tab) ---------- */
+
+.vault-release-list {
+    display: flex;
+    flex-direction: column;
+    gap: var(--vault-space-4);
+}
+
+.vault-release-row {
+    border: 1px solid var(--vault-border-color);
+    border-radius: var(--vault-border-radius);
+    padding: var(--vault-space-3) var(--vault-space-4);
+    background: var(--vault-bg-primary, #fff);
+}
+
+.vault-release-row__header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: var(--vault-space-2);
+}
+
+.vault-release-row__name {
+    font-weight: var(--vault-font-weight-semibold);
+}
+
+.vault-release-row__features,
+.vault-release-preview {
+    font-family: inherit;
+    font-size: var(--vault-font-size-sm);
+    color: var(--vault-text-primary);
+    background: var(--vault-gray-50, #f7f8fa);
+    border: 1px solid var(--vault-border-color);
+    border-radius: var(--vault-border-radius);
+    padding: var(--vault-space-2) var(--vault-space-3);
+    margin: 0;
+    white-space: pre-wrap;
+}
+
+.vault-release-row__actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: var(--vault-space-2);
+}

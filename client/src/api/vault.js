@@ -127,6 +127,23 @@ export async function fetchTeams() {
     return query("SELECT id, name__v FROM retro_team__c ORDER BY name__v ASC");
 }
 
+export async function fetchReleases() {
+    return query(
+        "SELECT id, name__v, features__c FROM retro_release__c ORDER BY name__v ASC"
+    );
+}
+
+export async function createRelease(name, features) {
+    return create('retro_release__c', {
+        name__v: name,
+        features__c: features || null,
+    });
+}
+
+export async function updateRelease(id, fields) {
+    return update('retro_release__c', id, fields);
+}
+
 // Note: this Vault's SDK blocks direct queries on `user__sys`, so we pull
 // user names via dotted relationship syntax (facilitator__cr.name__v etc).
 // The client reads the joined value from the row via userName(row, prefix).
@@ -134,7 +151,8 @@ export async function fetchTeams() {
 export async function fetchBoards() {
     return query(
         "SELECT id, name__v, facilitator__c, facilitator__cr.name__v, " +
-        "team__c, release_tag__c, features__c, board_date__c, status__c " +
+        "team__c, release__c, release__cr.name__v, release__cr.features__c, " +
+        "board_date__c, status__c " +
         "FROM retro_board__c ORDER BY board_date__c DESC"
     );
 }
@@ -142,7 +160,8 @@ export async function fetchBoards() {
 export async function fetchBoard(boardId) {
     const records = await query(
         "SELECT id, name__v, facilitator__c, facilitator__cr.name__v, " +
-        "team__c, release_tag__c, features__c, board_date__c, status__c " +
+        "team__c, release__c, release__cr.name__v, release__cr.features__c, " +
+        "board_date__c, status__c " +
         "FROM retro_board__c " +
         `WHERE id = '${escapeVql(boardId)}'`
     );

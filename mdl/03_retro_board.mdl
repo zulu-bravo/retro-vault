@@ -32,10 +32,11 @@ ALTER Object retro_board__c (
 );
 
 ALTER Object retro_board__c (
-    add Field release_tag__c (
-        label('Release Tag'),
-        type('String'),
-        max_length(100),
+    add Field release__c (
+        label('Release'),
+        type('ObjectReference'),
+        object('retro_release__c'),
+        relationship_type('reference'),
         active(true),
         required(false),
         list_column(false)
@@ -59,17 +60,6 @@ ALTER Object retro_board__c (
         picklist('Picklist.board_status__c'),
         active(true),
         required(true),
-        list_column(false)
-    )
-);
-
-ALTER Object retro_board__c (
-    add Field features__c (
-        label('Features'),
-        type('String'),
-        max_length(1500),
-        active(true),
-        required(false),
         list_column(false)
     )
 );

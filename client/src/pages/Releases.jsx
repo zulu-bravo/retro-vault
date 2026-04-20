@@ -1,14 +1,15 @@
-// Insights — Release Sentiment chart.
-// One line per team across releases (X-axis Z→A, newest left), Y-axis 0–100%
-// where sentiment = sum(votes for went_well) / sum(votes for went_well + to_improve).
-// If a (release, team) bucket has zero votes, falls back to item-count ratio so
-// the chart isn't blank for unvoted boards.
+// Releases — Release Sentiment chart + release management.
+// One line per team across releases, Y-axis 0–100% sentiment
+// (sum of votes on went_well / sum of votes on went_well + to_improve).
+// Below the chart: a list of releases with inline-editable features.
 import React, { useEffect, useState, useMemo } from 'react';
-import { fetchAllFeedback, fetchFeedbackForBoard, fetchBoards, fetchTeams, userName } from '../api/vault';
+import {
+    fetchAllFeedback, fetchFeedbackForBoard, fetchBoards, fetchTeams,
+    fetchReleases, updateRelease, userName,
+} from '../api/vault';
 import Spinner, { EmptyState } from '../components/Spinner';
 import { ThemeBadge } from '../components/Badge';
 
-// Up to 6 distinct team colors. Cycles if more teams.
 const TEAM_PALETTE = [
     'var(--vault-success)',
     'var(--vault-primary)',
@@ -18,25 +19,29 @@ const TEAM_PALETTE = [
     'var(--vault-text-secondary)',
 ];
 
-export default function Insights({ showToast }) {
+export default function Releases({ showToast }) {
     const [loading, setLoading] = useState(true);
     const [feedback, setFeedback] = useState([]);
     const [boards, setBoards] = useState([]);
     const [teams, setTeams] = useState([]);
+    const [releases, setReleases] = useState([]);
     const [hover, setHover] = useState(null);
     const [hiddenTeams, setHiddenTeams] = useState(() => new Set());
-    const [drillDown, setDrillDown] = useState(null);  // { boardId, boardName, teamName, teamColor, release }
+    const [drillDown, setDrillDown] = useState(null);
     const [drillFeedback, setDrillFeedback] = useState(null);
 
     useEffect(() => {
         (async () => {
             try {
-                const [f, b, t] = await Promise.all([fetchAllFeedback(), fetchBoards(), fetchTeams()]);
+                const [f, b, t, r] = await Promise.all([
+                    fetchAllFeedback(), fetchBoards(), fetchTeams(), fetchReleases(),
+                ]);
                 setFeedback(f);
                 setBoards(b);
                 setTeams(t);
+                setReleases(r);
             } catch (err) {
-                showToast && showToast('Failed to load insights: ' + err.message, 'error');
+                showToast && showToast('Failed to load releases: ' + err.message, 'error');
                 console.error(err);
             } finally {
                 setLoading(false);
@@ -53,7 +58,6 @@ export default function Insights({ showToast }) {
             else next.add(teamId);
             return next;
         });
-        // Hovering a now-hidden team's marker would leave a stale tooltip
         setHover(null);
     }
 
@@ -61,7 +65,6 @@ export default function Insights({ showToast }) {
         if (!chart) return;
         const others = chart.teamMeta.map(t => t.id).filter(id => id !== teamId);
         const allOthersHidden = others.every(id => hiddenTeams.has(id));
-        // Already isolated → restore all
         setHiddenTeams(allOthersHidden && !hiddenTeams.has(teamId) ? new Set() : new Set(others));
         setHover(null);
     }
@@ -88,43 +91,50 @@ export default function Insights({ showToast }) {
         setDrillFeedback(null);
     }
 
-    if (loading) return <Spinner />;
-    if (!chart || chart.releases.length === 0) {
-        return (
-            <>
-                <Header />
-                <div className="vault-card vault-mb-24">
-                    <div className="vault-card__body">
-                        <EmptyState message="No release sentiment yet — add some Went Well / To Improve feedback to a board with a Release Tag." />
-                    </div>
-                </div>
-            </>
-        );
+    async function handleSaveFeatures(releaseId, features) {
+        try {
+            await updateRelease(releaseId, { features__c: features });
+            setReleases(prev => prev.map(r => r.id === releaseId ? { ...r, features__c: features } : r));
+            showToast && showToast('Features saved', 'success');
+        } catch (err) {
+            showToast && showToast('Failed to save features: ' + err.message, 'error');
+        }
     }
 
-    const visibleSeries = chart.series.filter(s => !hiddenTeams.has(s.teamId));
+    if (loading) return <Spinner />;
+
+    const visibleSeries = chart ? chart.series.filter(s => !hiddenTeams.has(s.teamId)) : [];
 
     return (
         <>
             <Header />
+
             <div className="vault-card vault-mb-24">
                 <div className="vault-card__header">
                     <span className="vault-card__title">Release Sentiment</span>
                 </div>
                 <div className="vault-card__body">
-                    <p className="vault-text-small vault-text-muted vault-mb-16">
-                        For each release × team, sentiment = vote-weighted Went Well share of the total Went Well + To Improve. Higher means a happier retro. Click a team to hide it; double-click to isolate.
-                    </p>
-                    <Legend
-                        teams={chart.teamMeta}
-                        hiddenTeams={hiddenTeams}
-                        onToggle={toggleTeam}
-                        onIsolate={isolateTeam}
-                        onShowAll={showAll}
-                    />
-                    <SentimentChart chart={{ ...chart, series: visibleSeries }} hover={hover} setHover={setHover} onSelect={handleDrillDown} />
+                    {!chart || chart.releases.length === 0 ? (
+                        <EmptyState message="No release sentiment yet — add some Went Well / To Improve feedback to a board linked to a release." />
+                    ) : (
+                        <>
+                            <p className="vault-text-small vault-text-muted vault-mb-16">
+                                For each release × team, sentiment = vote-weighted Went Well share of the total Went Well + To Improve. Higher means a happier retro. Click a team to hide it; double-click to isolate.
+                            </p>
+                            <Legend
+                                teams={chart.teamMeta}
+                                hiddenTeams={hiddenTeams}
+                                onToggle={toggleTeam}
+                                onIsolate={isolateTeam}
+                                onShowAll={showAll}
+                            />
+                            <SentimentChart chart={{ ...chart, series: visibleSeries }} hover={hover} setHover={setHover} onSelect={handleDrillDown} />
+                        </>
+                    )}
                 </div>
             </div>
+
+            <ReleaseListPanel releases={releases} boards={boards} onSaveFeatures={handleSaveFeatures} />
 
             {drillDown && (
                 <DrillDownPanel
@@ -141,8 +151,8 @@ function Header() {
     return (
         <div className="vault-page-header">
             <div>
-                <h1 className="vault-page-header__title">Insights</h1>
-                <p className="vault-page-header__subtitle">Cross-release retrospective signals</p>
+                <h1 className="vault-page-header__title">Releases</h1>
+                <p className="vault-page-header__subtitle">Cross-team signals and feature lists by release</p>
             </div>
         </div>
     );
@@ -160,11 +170,13 @@ function buildChart(feedback, boards, teams) {
     const buckets = new Map();
     for (const fi of feedback) {
         const board = boardById.get(fi.retro_board__c);
-        if (!board || !board.release_tag__c || !board.team__c) continue;
+        if (!board) continue;
+        const releaseName = board['release__cr.name__v'];
+        if (!releaseName || !board.team__c) continue;
         const cat = fi.category__c;
         if (cat !== 'went_well__c' && cat !== 'didnt_go_well__c') continue;
         const weight = Number(fi.vote_count__c) || 0;
-        const key = `${board.release_tag__c}|${board.team__c}`;
+        const key = `${releaseName}|${board.team__c}`;
         if (!buckets.has(key)) buckets.set(key, { wwVotes: 0, totalVotes: 0, wwCount: 0, totalCount: 0, boardId: board.id, boardName: board.name__v });
         const b = buckets.get(key);
         b.totalVotes += weight;
@@ -179,13 +191,8 @@ function buildChart(feedback, boards, teams) {
 
     if (buckets.size === 0) return null;
 
-    // Releases sorted A→Z (ascending alphabetical = oldest first for the YYRX.X scheme,
-    // i.e. standard left-to-right timeline orientation)
     const releases = [...new Set([...buckets.keys()].map(k => k.split('|')[0]))].sort();
-    // Team IDs that have at least one data point
     const teamIds = [...new Set([...buckets.keys()].map(k => k.split('|')[1]))];
-
-    // Stable team order: by name asc
     teamIds.sort((a, b) => (teamNameById.get(a) || a).localeCompare(teamNameById.get(b) || b));
 
     const teamMeta = teamIds.map((id, i) => ({
@@ -194,7 +201,6 @@ function buildChart(feedback, boards, teams) {
         color: TEAM_PALETTE[i % TEAM_PALETTE.length],
     }));
 
-    // Series: for each team, a list of points {release, x: index, sentiment, ...}
     const series = teamMeta.map(t => {
         const points = [];
         releases.forEach((rel, x) => {
@@ -203,7 +209,6 @@ function buildChart(feedback, boards, teams) {
                 points.push({ release: rel, x, sentiment: null });
                 return;
             }
-            // Vote-weighted; fall back to item-count if no votes recorded
             const sentiment = b.totalVotes > 0
                 ? Math.round((b.wwVotes / b.totalVotes) * 100)
                 : Math.round((b.wwCount / b.totalCount) * 100);
@@ -249,11 +254,7 @@ function Legend({ teams, hiddenTeams, onToggle, onIsolate, onShowAll }) {
                 );
             })}
             {anyHidden && (
-                <button
-                    type="button"
-                    className="vault-chart-legend__reset"
-                    onClick={onShowAll}
-                >
+                <button type="button" className="vault-chart-legend__reset" onClick={onShowAll}>
                     Show all
                 </button>
             )}
@@ -263,18 +264,14 @@ function Legend({ teams, hiddenTeams, onToggle, onIsolate, onShowAll }) {
 
 function SentimentChart({ chart, hover, setHover, onSelect }) {
     const { releases, series } = chart;
-    // Use a fixed viewBox; CSS scales it to container width
     const W = 800, H = 320;
     const PADDING = { top: 16, right: 24, bottom: 48, left: 44 };
     const plotW = W - PADDING.left - PADDING.right;
     const plotH = H - PADDING.top - PADDING.bottom;
 
-    // X positions: equally spaced, with half-step margin on each side
     const n = releases.length;
     const stepX = n > 1 ? plotW / (n - 1) : 0;
     const xAt = i => PADDING.left + (n > 1 ? i * stepX : plotW / 2);
-
-    // Y: 0 at bottom, 100 at top
     const yAt = pct => PADDING.top + plotH * (1 - pct / 100);
 
     const yTicks = [0, 25, 50, 75, 100];
@@ -282,60 +279,26 @@ function SentimentChart({ chart, hover, setHover, onSelect }) {
     return (
         <div className="vault-chart" onMouseLeave={() => setHover(null)}>
             <svg className="vault-chart__svg" viewBox={`0 0 ${W} ${H}`} role="img" aria-label="Release sentiment by team">
-                {/* Sentiment zones — subtle green above 75%, subtle red below 25% (aligned to Y-axis ticks) */}
-                <rect
-                    x={PADDING.left}
-                    y={PADDING.top}
-                    width={plotW}
-                    height={yAt(75) - PADDING.top}
-                    className="vault-chart__zone vault-chart__zone--positive"
-                />
-                <rect
-                    x={PADDING.left}
-                    y={yAt(25)}
-                    width={plotW}
-                    height={yAt(0) - yAt(25)}
-                    className="vault-chart__zone vault-chart__zone--negative"
-                />
+                <rect x={PADDING.left} y={PADDING.top} width={plotW} height={yAt(75) - PADDING.top} className="vault-chart__zone vault-chart__zone--positive" />
+                <rect x={PADDING.left} y={yAt(25)} width={plotW} height={yAt(0) - yAt(25)} className="vault-chart__zone vault-chart__zone--negative" />
 
-                {/* Y gridlines */}
                 {yTicks.map(t => (
                     <g key={t}>
-                        <line
-                            x1={PADDING.left} x2={W - PADDING.right}
-                            y1={yAt(t)} y2={yAt(t)}
-                            className="vault-chart__gridline"
-                        />
-                        <text
-                            x={PADDING.left - 8} y={yAt(t)}
-                            className="vault-chart__y-label"
-                            textAnchor="end" dominantBaseline="middle"
-                        >
+                        <line x1={PADDING.left} x2={W - PADDING.right} y1={yAt(t)} y2={yAt(t)} className="vault-chart__gridline" />
+                        <text x={PADDING.left - 8} y={yAt(t)} className="vault-chart__y-label" textAnchor="end" dominantBaseline="middle">
                             {t}%
                         </text>
                     </g>
                 ))}
 
-                {/* X labels */}
                 {releases.map((rel, i) => (
-                    <text
-                        key={rel}
-                        x={xAt(i)} y={H - PADDING.bottom + 18}
-                        className="vault-chart__x-label"
-                        textAnchor="middle"
-                    >
+                    <text key={rel} x={xAt(i)} y={H - PADDING.bottom + 18} className="vault-chart__x-label" textAnchor="middle">
                         {rel}
                     </text>
                 ))}
 
-                {/* X axis baseline */}
-                <line
-                    x1={PADDING.left} x2={W - PADDING.right}
-                    y1={yAt(0)} y2={yAt(0)}
-                    className="vault-chart__axis"
-                />
+                <line x1={PADDING.left} x2={W - PADDING.right} y1={yAt(0)} y2={yAt(0)} className="vault-chart__axis" />
 
-                {/* Series lines */}
                 {series.map(s => {
                     const segments = buildSegments(s.points);
                     return (
@@ -355,7 +318,6 @@ function SentimentChart({ chart, hover, setHover, onSelect }) {
                     );
                 })}
 
-                {/* Markers + hover hit-areas (render on top of lines) */}
                 {series.map(s => (
                     <g key={s.teamId + '-markers'}>
                         {s.points.filter(p => p.sentiment !== null).map(p => {
@@ -363,12 +325,7 @@ function SentimentChart({ chart, hover, setHover, onSelect }) {
                             const isHover = hover && hover.teamId === s.teamId && hover.release === p.release;
                             return (
                                 <g key={p.release}>
-                                    <circle
-                                        cx={cx} cy={cy}
-                                        r={isHover ? 6 : 4}
-                                        fill="white" stroke={s.color} strokeWidth="2"
-                                    />
-                                    {/* Larger transparent hit area — click to drill down */}
+                                    <circle cx={cx} cy={cy} r={isHover ? 6 : 4} fill="white" stroke={s.color} strokeWidth="2" />
                                     <circle
                                         cx={cx} cy={cy} r="14"
                                         fill="transparent"
@@ -382,7 +339,6 @@ function SentimentChart({ chart, hover, setHover, onSelect }) {
                     </g>
                 ))}
 
-                {/* Tooltip */}
                 {hover && hover.sentiment !== null && (
                     <Tooltip x={xAt(hover.x)} y={yAt(hover.sentiment)} hover={hover} chartW={W} />
                 )}
@@ -391,8 +347,6 @@ function SentimentChart({ chart, hover, setHover, onSelect }) {
     );
 }
 
-// Split a series into contiguous non-null segments so we don't draw lines
-// across "no data" gaps.
 function buildSegments(points) {
     const segs = [];
     let cur = [];
@@ -487,6 +441,103 @@ function DrillColumn({ title, items, accentClass }) {
                     </div>
                 </div>
             ))}
+        </div>
+    );
+}
+
+/* ---------- Release list (management) ---------- */
+
+function ReleaseListPanel({ releases, boards, onSaveFeatures }) {
+    const boardCountByRelease = new Map();
+    for (const b of boards) {
+        if (b.release__c) {
+            boardCountByRelease.set(b.release__c, (boardCountByRelease.get(b.release__c) || 0) + 1);
+        }
+    }
+
+    return (
+        <div className="vault-card vault-mb-24">
+            <div className="vault-card__header">
+                <span className="vault-card__title">Releases</span>
+            </div>
+            <div className="vault-card__body">
+                {releases.length === 0 ? (
+                    <EmptyState message="No releases yet. Create one when setting up a new board." />
+                ) : (
+                    <div className="vault-release-list">
+                        {releases.map(r => (
+                            <ReleaseRow
+                                key={r.id}
+                                release={r}
+                                boardCount={boardCountByRelease.get(r.id) || 0}
+                                onSave={features => onSaveFeatures(r.id, features)}
+                            />
+                        ))}
+                    </div>
+                )}
+            </div>
+        </div>
+    );
+}
+
+function ReleaseRow({ release, boardCount, onSave }) {
+    const [editing, setEditing] = useState(false);
+    const [draft, setDraft] = useState(release.features__c || '');
+    const [saving, setSaving] = useState(false);
+
+    async function handleSave() {
+        setSaving(true);
+        try {
+            await onSave(draft);
+            setEditing(false);
+        } finally {
+            setSaving(false);
+        }
+    }
+
+    function handleCancel() {
+        setDraft(release.features__c || '');
+        setEditing(false);
+    }
+
+    return (
+        <div className="vault-release-row">
+            <div className="vault-release-row__header">
+                <div>
+                    <span className="vault-release-row__name">{release.name__v}</span>
+                    <span className="vault-text-small vault-text-muted">
+                        {' · '}{boardCount} board{boardCount !== 1 ? 's' : ''}
+                    </span>
+                </div>
+                {!editing && (
+                    <button className="vault-btn vault-btn--secondary vault-btn--small" onClick={() => setEditing(true)}>
+                        Edit features
+                    </button>
+                )}
+            </div>
+            {editing ? (
+                <>
+                    <textarea
+                        className="vault-textarea"
+                        rows={5}
+                        value={draft}
+                        onChange={e => setDraft(e.target.value)}
+                        placeholder="One feature per line"
+                    />
+                    <div className="vault-release-row__actions vault-mt-8">
+                        <button className="vault-btn vault-btn--secondary vault-btn--small" onClick={handleCancel} disabled={saving}>Cancel</button>
+                        <button className="vault-btn vault-btn--primary vault-btn--small" onClick={handleSave} disabled={saving}>
+                            {saving ? 'Saving…' : 'Save'}
+                        </button>
+                    </div>
+                </>
+            ) : (
+                release.features__c ? (
+                    <pre className="vault-release-row__features">{release.features__c}</pre>
+                ) : (
+                    <div className="vault-text-small vault-text-muted">No features listed.</div>
+                )
+            )}
         </div>
     );
 }
