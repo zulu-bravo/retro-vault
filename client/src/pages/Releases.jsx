@@ -5,7 +5,7 @@
 import React, { useEffect, useState, useMemo } from 'react';
 import {
     fetchAllFeedback, fetchFeedbackForBoard, fetchBoards, fetchTeams,
-    fetchReleases, updateRelease, userName,
+    fetchReleases, fetchFeatures, createFeature, deleteFeature, userName,
 } from '../api/vault';
 import Spinner, { EmptyState } from '../components/Spinner';
 import { ThemeBadge } from '../components/Badge';
@@ -25,6 +25,7 @@ export default function Releases({ showToast }) {
     const [boards, setBoards] = useState([]);
     const [teams, setTeams] = useState([]);
     const [releases, setReleases] = useState([]);
+    const [features, setFeatures] = useState([]);
     const [hover, setHover] = useState(null);
     const [hiddenTeams, setHiddenTeams] = useState(() => new Set());
     const [drillDown, setDrillDown] = useState(null);
@@ -33,13 +34,14 @@ export default function Releases({ showToast }) {
     useEffect(() => {
         (async () => {
             try {
-                const [f, b, t, r] = await Promise.all([
-                    fetchAllFeedback(), fetchBoards(), fetchTeams(), fetchReleases(),
+                const [f, b, t, r, ft] = await Promise.all([
+                    fetchAllFeedback(), fetchBoards(), fetchTeams(), fetchReleases(), fetchFeatures(),
                 ]);
                 setFeedback(f);
                 setBoards(b);
                 setTeams(t);
                 setReleases(r);
+                setFeatures(ft);
             } catch (err) {
                 showToast && showToast('Failed to load releases: ' + err.message, 'error');
                 console.error(err);
@@ -91,13 +93,36 @@ export default function Releases({ showToast }) {
         setDrillFeedback(null);
     }
 
-    async function handleSaveFeatures(releaseId, features) {
+    async function handleAddFeature(releaseId, name) {
+        const trimmed = name.trim();
+        if (!trimmed) return;
+        const dupes = features.some(f => f.release__c === releaseId && (f.display_name__c || f.name__v).toLowerCase() === trimmed.toLowerCase());
+        if (dupes) {
+            showToast && showToast(`"${trimmed}" already exists on this release`, 'info');
+            return;
+        }
         try {
-            await updateRelease(releaseId, { features__c: features });
-            setReleases(prev => prev.map(r => r.id === releaseId ? { ...r, features__c: features } : r));
-            showToast && showToast('Features saved', 'success');
+            const release = releases.find(r => r.id === releaseId);
+            const id = await createFeature(trimmed, releaseId, release ? release.name__v : '');
+            setFeatures(prev => [...prev, {
+                id,
+                name__v: `${release ? release.name__v : releaseId} . ${trimmed}`,
+                display_name__c: trimmed,
+                release__c: releaseId,
+                'release__cr.name__v': release ? release.name__v : '',
+            }]);
+            showToast && showToast('Feature added', 'success');
         } catch (err) {
-            showToast && showToast('Failed to save features: ' + err.message, 'error');
+            showToast && showToast('Failed to add feature: ' + err.message, 'error');
+        }
+    }
+
+    async function handleDeleteFeature(featureId) {
+        try {
+            await deleteFeature(featureId);
+            setFeatures(prev => prev.filter(f => f.id !== featureId));
+        } catch (err) {
+            showToast && showToast('Failed to remove feature: ' + err.message, 'error');
         }
     }
 
@@ -134,7 +159,13 @@ export default function Releases({ showToast }) {
                 </div>
             </div>
 
-            <ReleaseListPanel releases={releases} boards={boards} onSaveFeatures={handleSaveFeatures} />
+            <ReleaseListPanel
+                releases={releases}
+                boards={boards}
+                features={features}
+                onAddFeature={handleAddFeature}
+                onDeleteFeature={handleDeleteFeature}
+            />
 
             {drillDown && (
                 <DrillDownPanel
@@ -447,12 +478,17 @@ function DrillColumn({ title, items, accentClass }) {
 
 /* ---------- Release list (management) ---------- */
 
-function ReleaseListPanel({ releases, boards, onSaveFeatures }) {
+function ReleaseListPanel({ releases, boards, features, onAddFeature, onDeleteFeature }) {
     const boardCountByRelease = new Map();
     for (const b of boards) {
         if (b.release__c) {
             boardCountByRelease.set(b.release__c, (boardCountByRelease.get(b.release__c) || 0) + 1);
         }
+    }
+    const featuresByRelease = new Map();
+    for (const f of features) {
+        if (!featuresByRelease.has(f.release__c)) featuresByRelease.set(f.release__c, []);
+        featuresByRelease.get(f.release__c).push(f);
     }
 
     return (
@@ -470,7 +506,9 @@ function ReleaseListPanel({ releases, boards, onSaveFeatures }) {
                                 key={r.id}
                                 release={r}
                                 boardCount={boardCountByRelease.get(r.id) || 0}
-                                onSave={features => onSaveFeatures(r.id, features)}
+                                features={featuresByRelease.get(r.id) || []}
+                                onAddFeature={name => onAddFeature(r.id, name)}
+                                onDeleteFeature={onDeleteFeature}
                             />
                         ))}
                     </div>
@@ -480,24 +518,20 @@ function ReleaseListPanel({ releases, boards, onSaveFeatures }) {
     );
 }
 
-function ReleaseRow({ release, boardCount, onSave }) {
-    const [editing, setEditing] = useState(false);
-    const [draft, setDraft] = useState(release.features__c || '');
-    const [saving, setSaving] = useState(false);
+function ReleaseRow({ release, boardCount, features, onAddFeature, onDeleteFeature }) {
+    const [draft, setDraft] = useState('');
+    const [adding, setAdding] = useState(false);
 
-    async function handleSave() {
-        setSaving(true);
+    async function handleAdd() {
+        const v = draft.trim();
+        if (!v) return;
+        setAdding(true);
         try {
-            await onSave(draft);
-            setEditing(false);
+            await onAddFeature(v);
+            setDraft('');
         } finally {
-            setSaving(false);
+            setAdding(false);
         }
-    }
-
-    function handleCancel() {
-        setDraft(release.features__c || '');
-        setEditing(false);
     }
 
     return (
@@ -507,37 +541,45 @@ function ReleaseRow({ release, boardCount, onSave }) {
                     <span className="vault-release-row__name">{release.name__v}</span>
                     <span className="vault-text-small vault-text-muted">
                         {' · '}{boardCount} board{boardCount !== 1 ? 's' : ''}
+                        {' · '}{features.length} feature{features.length !== 1 ? 's' : ''}
                     </span>
                 </div>
-                {!editing && (
-                    <button className="vault-btn vault-btn--secondary vault-btn--small" onClick={() => setEditing(true)}>
-                        Edit features
-                    </button>
-                )}
             </div>
-            {editing ? (
-                <>
-                    <textarea
-                        className="vault-textarea"
-                        rows={5}
-                        value={draft}
-                        onChange={e => setDraft(e.target.value)}
-                        placeholder="One feature per line"
-                    />
-                    <div className="vault-release-row__actions vault-mt-8">
-                        <button className="vault-btn vault-btn--secondary vault-btn--small" onClick={handleCancel} disabled={saving}>Cancel</button>
-                        <button className="vault-btn vault-btn--primary vault-btn--small" onClick={handleSave} disabled={saving}>
-                            {saving ? 'Saving…' : 'Save'}
-                        </button>
-                    </div>
-                </>
+            {features.length === 0 ? (
+                <div className="vault-text-small vault-text-muted vault-mb-8">
+                    No features yet.
+                </div>
             ) : (
-                release.features__c ? (
-                    <pre className="vault-release-row__features">{release.features__c}</pre>
-                ) : (
-                    <div className="vault-text-small vault-text-muted">No features listed.</div>
-                )
+                <div className="vault-chip-list vault-mb-8">
+                    {features.map(f => {
+                        const name = f.display_name__c || f.name__v;
+                        return (
+                        <span key={f.id} className="vault-chip">
+                            {name}
+                            <button
+                                type="button"
+                                aria-label={`Remove ${name}`}
+                                title="Remove feature"
+                                onClick={() => onDeleteFeature(f.id)}
+                            >×</button>
+                        </span>
+                    );})}
+                </div>
             )}
+            <div className="vault-flex vault-gap-8">
+                <input
+                    className="vault-input"
+                    type="text"
+                    placeholder="Add a feature…"
+                    value={draft}
+                    onChange={e => setDraft(e.target.value)}
+                    onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); handleAdd(); } }}
+                    disabled={adding}
+                />
+                <button type="button" className="vault-btn vault-btn--secondary vault-btn--small" onClick={handleAdd} disabled={adding || !draft.trim()}>
+                    {adding ? 'Adding…' : 'Add'}
+                </button>
+            </div>
         </div>
     );
 }

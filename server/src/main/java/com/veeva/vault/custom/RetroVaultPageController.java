@@ -366,7 +366,9 @@ public class RetroVaultPageController implements PageController {
         if (objectName == null) return false;
         return "retro_team__c".equals(objectName)
                 || "retro_release__c".equals(objectName)
+                || "retro_feature__c".equals(objectName)
                 || "retro_board__c".equals(objectName)
+                || "retro_board_feature__c".equals(objectName)
                 || "retro_feedback__c".equals(objectName)
                 || "retro_action__c".equals(objectName)
                 || "retro_vote__c".equals(objectName)
@@ -377,7 +379,9 @@ public class RetroVaultPageController implements PageController {
         String upper = vql.toUpperCase();
         if (upper.contains(" FROM RETRO_TEAM__C")
                 || upper.contains(" FROM RETRO_RELEASE__C")
+                || upper.contains(" FROM RETRO_FEATURE__C")
                 || upper.contains(" FROM RETRO_BOARD__C")
+                || upper.contains(" FROM RETRO_BOARD_FEATURE__C")
                 || upper.contains(" FROM RETRO_FEEDBACK__C")
                 || upper.contains(" FROM RETRO_ACTION__C")
                 || upper.contains(" FROM RETRO_VOTE__C")

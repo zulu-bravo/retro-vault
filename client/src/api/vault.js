@@ -129,19 +129,75 @@ export async function fetchTeams() {
 
 export async function fetchReleases() {
     return query(
-        "SELECT id, name__v, features__c FROM retro_release__c ORDER BY name__v ASC"
+        "SELECT id, name__v FROM retro_release__c ORDER BY name__v ASC"
     );
 }
 
-export async function createRelease(name, features) {
-    return create('retro_release__c', {
-        name__v: name,
-        features__c: features || null,
-    });
+export async function createRelease(name) {
+    return create('retro_release__c', { name__v: name });
 }
 
 export async function updateRelease(id, fields) {
     return update('retro_release__c', id, fields);
+}
+
+/* ---------- Features ---------- */
+
+export async function fetchFeatures() {
+    return query(
+        "SELECT id, name__v, display_name__c, release__c, release__cr.name__v " +
+        "FROM retro_feature__c ORDER BY release__cr.name__v ASC, display_name__c ASC"
+    );
+}
+
+export async function fetchFeaturesForRelease(releaseId) {
+    return query(
+        "SELECT id, name__v, display_name__c, release__c " +
+        "FROM retro_feature__c " +
+        `WHERE release__c = '${escapeVql(releaseId)}' ` +
+        "ORDER BY display_name__c ASC"
+    );
+}
+
+export async function createFeature(displayName, releaseId, releaseName) {
+    // name__v must be unique tenant-wide — store a composite that includes
+    // the release name so the same feature name can exist under different releases.
+    // The UI displays display_name__c.
+    const composite = `${releaseName || releaseId} . ${displayName}`.slice(0, 200);
+    return create('retro_feature__c', {
+        name__v: composite,
+        display_name__c: displayName,
+        release__c: releaseId,
+    });
+}
+
+export async function deleteFeature(featureId) {
+    return deleteRecord('retro_feature__c', featureId);
+}
+
+/* ---------- Board <-> Feature junction ---------- */
+
+export async function fetchBoardFeatures(boardId) {
+    return query(
+        "SELECT id, retro_feature__c, retro_feature__cr.name__v, retro_feature__cr.display_name__c " +
+        "FROM retro_board_feature__c " +
+        `WHERE retro_board__c = '${escapeVql(boardId)}' ` +
+        "ORDER BY retro_feature__cr.display_name__c ASC"
+    );
+}
+
+export async function assignFeatureToBoard(boardId, featureId) {
+    // Composite name for uniqueness — matches the pattern used on retro_vote__c.
+    const composite = `${boardId}_${featureId}`.slice(0, 80);
+    return create('retro_board_feature__c', {
+        name__v: composite,
+        retro_board__c: boardId,
+        retro_feature__c: featureId,
+    });
+}
+
+export async function unassignFeatureFromBoard(junctionId) {
+    return deleteRecord('retro_board_feature__c', junctionId);
 }
 
 // Note: this Vault's SDK blocks direct queries on `user__sys`, so we pull
@@ -151,7 +207,7 @@ export async function updateRelease(id, fields) {
 export async function fetchBoards() {
     return query(
         "SELECT id, name__v, facilitator__c, facilitator__cr.name__v, " +
-        "team__c, release__c, release__cr.name__v, release__cr.features__c, " +
+        "team__c, release__c, release__cr.name__v, " +
         "board_date__c, status__c " +
         "FROM retro_board__c ORDER BY board_date__c DESC"
     );
@@ -160,7 +216,7 @@ export async function fetchBoards() {
 export async function fetchBoard(boardId) {
     const records = await query(
         "SELECT id, name__v, facilitator__c, facilitator__cr.name__v, " +
-        "team__c, release__c, release__cr.name__v, release__cr.features__c, " +
+        "team__c, release__c, release__cr.name__v, " +
         "board_date__c, status__c " +
         "FROM retro_board__c " +
         `WHERE id = '${escapeVql(boardId)}'`

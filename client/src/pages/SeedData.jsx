@@ -38,10 +38,10 @@ export default function SeedData({ navigate, showToast }) {
 
             append('\nCreating releases...', 'info');
             const releaseData = [
-                { name__v: 'v2.3.0', features__c: 'Checkout redesign\nSearch v2' },
-                { name__v: 'v2.4.0', features__c: 'Onboarding flow\nDashboard widgets' },
-                { name__v: 'v3.0.0', features__c: 'Architecture overhaul\nAPI v3 rollout' },
-                { name__v: 'v2.4.1-hotfix', features__c: 'Emergency auth patch' },
+                { name__v: 'v2.3.0' },
+                { name__v: 'v2.4.0' },
+                { name__v: 'v3.0.0' },
+                { name__v: 'v2.4.1-hotfix' },
             ];
             const releaseIds = [];
             for (const rd of releaseData) {
@@ -50,12 +50,36 @@ export default function SeedData({ navigate, showToast }) {
                 append(`  Created release: ${rd.name__v}`, 'success');
             }
 
+            append('\nCreating features per release...', 'info');
+            // Each release has multiple features; teams take subsets.
+            const featuresByRelease = [
+                ['Checkout redesign', 'Search v2', 'Cart sync'],                     // v2.3.0
+                ['Onboarding flow', 'Dashboard widgets', 'Profile v2'],              // v2.4.0
+                ['Architecture overhaul', 'API v3 rollout', 'Auth rewrite'],         // v3.0.0
+                ['Emergency auth patch'],                                            // v2.4.1-hotfix
+            ];
+            // releaseIdx -> featureName -> featureId
+            const featureIdsByRelease = featuresByRelease.map(() => ({}));
+            for (let ri = 0; ri < featuresByRelease.length; ri++) {
+                const relName = releaseData[ri].name__v;
+                for (const fname of featuresByRelease[ri]) {
+                    const fid = await create('retro_feature__c', {
+                        name__v: `${relName} . ${fname}`.slice(0, 200),
+                        display_name__c: fname,
+                        release__c: releaseIds[ri],
+                    });
+                    featureIdsByRelease[ri][fname] = fid;
+                }
+                append(`  ${featuresByRelease[ri].length} features for ${relName}`, 'success');
+            }
+
             append('\nCreating retro boards...', 'info');
+            // Each board picks a subset of its release's features (what this team is doing).
             const boardData = [
-                { name__v: 'Sprint 10 Retro', team: 0, fac: 0, release: 0, date: '2026-01-10', status: 'closed__c' },
-                { name__v: 'Sprint 11 Retro', team: 0, fac: 1, release: 1, date: '2026-01-24', status: 'closed__c' },
-                { name__v: 'Sprint 12 Retro', team: 1, fac: 3, release: 2, date: '2026-02-07', status: 'closed__c' },
-                { name__v: 'Hotfix Post-Mortem', team: 2, fac: 6, release: 3, date: '2026-02-14', status: 'active__c' }
+                { name__v: 'Sprint 10 Retro', team: 0, fac: 0, release: 0, features: ['Checkout redesign', 'Search v2'], date: '2026-01-10', status: 'closed__c' },
+                { name__v: 'Sprint 11 Retro', team: 0, fac: 1, release: 1, features: ['Onboarding flow', 'Profile v2'], date: '2026-01-24', status: 'closed__c' },
+                { name__v: 'Sprint 12 Retro', team: 1, fac: 3, release: 2, features: ['Architecture overhaul', 'API v3 rollout'], date: '2026-02-07', status: 'closed__c' },
+                { name__v: 'Hotfix Post-Mortem', team: 2, fac: 6, release: 3, features: ['Emergency auth patch'], date: '2026-02-14', status: 'active__c' },
             ];
             const boardIds = [];
             for (const bd of boardData) {
@@ -69,6 +93,15 @@ export default function SeedData({ navigate, showToast }) {
                 });
                 boardIds.push(id);
                 append(`  Created: ${bd.name__v}`, 'success');
+                for (const fname of bd.features) {
+                    const fid = featureIdsByRelease[bd.release][fname];
+                    if (!fid) continue;
+                    await create('retro_board_feature__c', {
+                        name__v: `${id}_${fid}`.slice(0, 80),
+                        retro_board__c: id,
+                        retro_feature__c: fid,
+                    });
+                }
             }
 
             append('\nCreating feedback items...', 'info');
@@ -154,7 +187,7 @@ export default function SeedData({ navigate, showToast }) {
             append(`  Created ${voteCount} votes`, 'success');
 
             append('\n=== SEED COMPLETE ===', 'success');
-            append(`3 teams, 4 releases, 4 boards, 24 feedback items, 10 action items, ${voteCount} votes`, 'success');
+            append(`3 teams, 4 releases, 10 features, 4 boards + 7 board-feature links, 18 feedback items, 10 actions, ${voteCount} votes`, 'success');
             showToast('Seed complete!', 'success');
         } catch (err) {
             append(`\nERROR: ${err.message}`, 'error');
@@ -177,8 +210,9 @@ export default function SeedData({ navigate, showToast }) {
             <div className="vault-card vault-mb-24">
                 <div className="vault-card__body">
                     <p className="vault-mb-16">
-                        This will create 3 teams, 4 releases, 4 retro boards, 24 feedback items,
-                        10 action items, and ~80 votes using existing Vault users.
+                        This will create 3 teams, 4 releases, 10 features, 4 retro boards
+                        (with per-board feature subsets), 18 feedback items, 10 actions,
+                        and ~80 votes using existing Vault users.
                     </p>
                     <button className="vault-btn vault-btn--primary" onClick={runSeed} disabled={running}>
                         {running ? 'Running...' : 'Run Seed'}

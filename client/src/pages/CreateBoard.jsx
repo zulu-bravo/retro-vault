@@ -1,5 +1,10 @@
-import React, { useEffect, useState } from 'react';
-import { fetchTeams, fetchReleases, fetchBoard, create, update, createRelease, getCurrentUserId, getCurrentUserName, userName } from '../api/vault';
+import React, { useEffect, useState, useMemo } from 'react';
+import {
+    fetchTeams, fetchReleases, fetchBoard, fetchFeaturesForRelease,
+    fetchBoardFeatures, create, update, createRelease, createFeature,
+    assignFeatureToBoard, unassignFeatureFromBoard,
+    getCurrentUserId, getCurrentUserName, userName,
+} from '../api/vault';
 import Spinner from '../components/Spinner';
 import UserTypeAhead from '../components/UserTypeAhead';
 import { toISODate } from '../utils/format';
@@ -19,11 +24,21 @@ export default function CreateBoard({ boardId, navigate, showToast }) {
     const [teamId, setTeamId] = useState('');
     const [facilitatorId, setFacilitatorId] = useState('');
     const [facilitatorDisplay, setFacilitatorDisplay] = useState('');
-    const [releaseId, setReleaseId] = useState('');           // existing release id, NEW_RELEASE, or ''
+    const [releaseId, setReleaseId] = useState('');
     const [newReleaseName, setNewReleaseName] = useState('');
-    const [newReleaseFeatures, setNewReleaseFeatures] = useState('');
     const [boardDate, setBoardDate] = useState(toISODate(new Date()));
     const [status, setStatus] = useState('active__c');
+
+    // Features belonging to the currently-selected release (persisted records).
+    const [releaseFeatures, setReleaseFeatures] = useState([]);
+    // Feature IDs currently selected for this board (checked checkboxes).
+    const [selectedFeatureIds, setSelectedFeatureIds] = useState(() => new Set());
+    // Pending feature names typed in but not yet saved (used for new release or to add to existing release).
+    const [pendingFeatureNames, setPendingFeatureNames] = useState([]);
+    const [newFeatureDraft, setNewFeatureDraft] = useState('');
+    // When editing an existing board, track which junction rows exist so we can diff on save.
+    const [existingBoardFeatures, setExistingBoardFeatures] = useState([]);
+    const [loadingFeatures, setLoadingFeatures] = useState(false);
 
     useEffect(() => {
         (async () => {
@@ -31,7 +46,7 @@ export default function CreateBoard({ boardId, navigate, showToast }) {
                 const [t, r, existing] = await Promise.all([
                     fetchTeams(),
                     fetchReleases(),
-                    isEdit ? fetchBoard(boardId) : Promise.resolve(null)
+                    isEdit ? fetchBoard(boardId) : Promise.resolve(null),
                 ]);
                 setTeams(t);
                 setReleases(r);
@@ -43,6 +58,15 @@ export default function CreateBoard({ boardId, navigate, showToast }) {
                     setReleaseId(existing.release__c || '');
                     setBoardDate(existing.board_date__c || toISODate(new Date()));
                     setStatus(existing.status__c || 'active__c');
+                    if (existing.release__c) {
+                        const [feats, bfs] = await Promise.all([
+                            fetchFeaturesForRelease(existing.release__c),
+                            fetchBoardFeatures(boardId),
+                        ]);
+                        setReleaseFeatures(feats);
+                        setExistingBoardFeatures(bfs);
+                        setSelectedFeatureIds(new Set(bfs.map(bf => bf.retro_feature__c)));
+                    }
                 } else {
                     setFacilitatorId(currentUserId || '');
                     setFacilitatorDisplay(currentUserName || currentUserId || '');
@@ -55,8 +79,59 @@ export default function CreateBoard({ boardId, navigate, showToast }) {
         })();
     }, [boardId]);
 
-    const selectedRelease = releases.find(r => r.id === releaseId);
+    // Load release features when the picker changes to an existing release.
+    useEffect(() => {
+        if (!releaseId || releaseId === NEW_RELEASE) {
+            setReleaseFeatures([]);
+            // Keep pendingFeatureNames — they roll over into the new release if user picked that path.
+            return;
+        }
+        let cancelled = false;
+        setLoadingFeatures(true);
+        (async () => {
+            try {
+                const feats = await fetchFeaturesForRelease(releaseId);
+                if (!cancelled) setReleaseFeatures(feats);
+            } catch (err) {
+                showToast && showToast('Failed to load release features: ' + err.message, 'error');
+            } finally {
+                if (!cancelled) setLoadingFeatures(false);
+            }
+        })();
+        return () => { cancelled = true; };
+    }, [releaseId]);
+
     const isNewRelease = releaseId === NEW_RELEASE;
+
+    function toggleFeature(fid) {
+        setSelectedFeatureIds(prev => {
+            const next = new Set(prev);
+            if (next.has(fid)) next.delete(fid);
+            else next.add(fid);
+            return next;
+        });
+    }
+
+    function handleAddPendingFeature() {
+        const v = newFeatureDraft.trim();
+        if (!v) return;
+        // de-duplicate against already-existing release features + other pending names
+        const existingNames = new Set([
+            ...releaseFeatures.map(f => (f.display_name__c || f.name__v).toLowerCase()),
+            ...pendingFeatureNames.map(n => n.toLowerCase()),
+        ]);
+        if (existingNames.has(v.toLowerCase())) {
+            showToast && showToast(`"${v}" already exists`, 'info');
+            setNewFeatureDraft('');
+            return;
+        }
+        setPendingFeatureNames(prev => [...prev, v]);
+        setNewFeatureDraft('');
+    }
+
+    function removePendingFeature(idx) {
+        setPendingFeatureNames(prev => prev.filter((_, i) => i !== idx));
+    }
 
     async function handleSubmit(e) {
         e.preventDefault();
@@ -70,11 +145,27 @@ export default function CreateBoard({ boardId, navigate, showToast }) {
         }
         setSubmitting(true);
         try {
+            // 1. Resolve release ID (create new release if needed).
             let finalReleaseId = releaseId && releaseId !== NEW_RELEASE ? releaseId : null;
+            let finalReleaseName = '';
             if (isNewRelease) {
-                finalReleaseId = await createRelease(newReleaseName.trim(), newReleaseFeatures);
+                finalReleaseName = newReleaseName.trim();
+                finalReleaseId = await createRelease(finalReleaseName);
+            } else if (finalReleaseId) {
+                const selected = releases.find(r => r.id === finalReleaseId);
+                finalReleaseName = selected ? selected.name__v : '';
             }
 
+            // 2. Create any pending feature records on the release.
+            const newlyCreatedFeatureIds = [];
+            if (finalReleaseId) {
+                for (const pName of pendingFeatureNames) {
+                    const fid = await createFeature(pName, finalReleaseId, finalReleaseName);
+                    newlyCreatedFeatureIds.push(fid);
+                }
+            }
+
+            // 3. Create/update the board itself.
             const fields = {
                 name__v: name,
                 team__c: teamId,
@@ -83,16 +174,32 @@ export default function CreateBoard({ boardId, navigate, showToast }) {
                 status__c: status,
                 release__c: finalReleaseId,
             };
-
+            let savedBoardId = boardId;
             if (isEdit) {
                 await update('retro_board__c', boardId, fields);
-                showToast('Board updated!', 'success');
-                navigate('board', { boardId });
             } else {
-                const newId = await create('retro_board__c', fields);
-                showToast('Board created!', 'success');
-                navigate('board', { boardId: newId });
+                savedBoardId = await create('retro_board__c', fields);
             }
+
+            // 4. Diff feature assignments on this board.
+            const desiredFeatureIds = new Set([...selectedFeatureIds, ...newlyCreatedFeatureIds]);
+            const existingByFeatureId = new Map(existingBoardFeatures.map(bf => [bf.retro_feature__c, bf.id]));
+
+            // Assign newly-selected features
+            for (const fid of desiredFeatureIds) {
+                if (!existingByFeatureId.has(fid)) {
+                    await assignFeatureToBoard(savedBoardId, fid);
+                }
+            }
+            // Remove de-selected features
+            for (const [fid, junctionId] of existingByFeatureId.entries()) {
+                if (!desiredFeatureIds.has(fid)) {
+                    await unassignFeatureFromBoard(junctionId);
+                }
+            }
+
+            showToast(isEdit ? 'Board updated!' : 'Board created!', 'success');
+            navigate('board', { boardId: savedBoardId });
         } catch (err) {
             showToast(`Failed to ${isEdit ? 'update' : 'create'} board: ${err.message}`, 'error');
             setSubmitting(false);
@@ -100,6 +207,8 @@ export default function CreateBoard({ boardId, navigate, showToast }) {
     }
 
     if (loading) return <Spinner />;
+
+    const showFeatureSection = isNewRelease || !!releaseId;
 
     return (
         <div style={{ maxWidth: 640 }}>
@@ -155,7 +264,11 @@ export default function CreateBoard({ boardId, navigate, showToast }) {
                             <select
                                 className="vault-select"
                                 value={releaseId}
-                                onChange={(e) => setReleaseId(e.target.value)}
+                                onChange={(e) => {
+                                    setReleaseId(e.target.value);
+                                    setSelectedFeatureIds(new Set());
+                                    setPendingFeatureNames([]);
+                                }}
                             >
                                 <option value="">No release</option>
                                 {releases.map(r => (
@@ -163,45 +276,50 @@ export default function CreateBoard({ boardId, navigate, showToast }) {
                                 ))}
                                 <option value={NEW_RELEASE}>+ New release…</option>
                             </select>
-                            <div className="vault-text-small vault-text-muted">
-                                Releases are shared across teams. Edit features on the Releases tab.
-                            </div>
                         </div>
 
                         {isNewRelease && (
-                            <>
-                                <div className="vault-form-group">
-                                    <label className="vault-label">New Release Name *</label>
+                            <div className="vault-form-group">
+                                <label className="vault-label">New Release Name *</label>
+                                <input
+                                    className="vault-input"
+                                    type="text"
+                                    placeholder="e.g., 26R1.0"
+                                    value={newReleaseName}
+                                    onChange={(e) => setNewReleaseName(e.target.value)}
+                                />
+                            </div>
+                        )}
+
+                        {showFeatureSection && (
+                            <div className="vault-form-group">
+                                <label className="vault-label">Features this team is working on</label>
+                                {loadingFeatures ? (
+                                    <Spinner />
+                                ) : (
+                                    <FeatureChecklist
+                                        releaseFeatures={releaseFeatures}
+                                        selectedIds={selectedFeatureIds}
+                                        onToggle={toggleFeature}
+                                        pending={pendingFeatureNames}
+                                        onRemovePending={removePendingFeature}
+                                    />
+                                )}
+                                <div className="vault-flex vault-gap-8 vault-mt-8">
                                     <input
                                         className="vault-input"
                                         type="text"
-                                        placeholder="e.g., 26R1.0"
-                                        value={newReleaseName}
-                                        onChange={(e) => setNewReleaseName(e.target.value)}
+                                        placeholder="Add a new feature…"
+                                        value={newFeatureDraft}
+                                        onChange={e => setNewFeatureDraft(e.target.value)}
+                                        onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); handleAddPendingFeature(); } }}
                                     />
+                                    <button type="button" className="vault-btn vault-btn--secondary" onClick={handleAddPendingFeature}>
+                                        Add
+                                    </button>
                                 </div>
-                                <div className="vault-form-group">
-                                    <label className="vault-label">Features</label>
-                                    <textarea
-                                        className="vault-textarea"
-                                        placeholder={'One feature per line, e.g.\nCheckout redesign\nSearch v2\nOnboarding flow'}
-                                        value={newReleaseFeatures}
-                                        onChange={(e) => setNewReleaseFeatures(e.target.value)}
-                                        rows={6}
-                                    />
-                                    <div className="vault-text-small vault-text-muted">
-                                        Feedback authors will pick from this list when adding items.
-                                    </div>
-                                </div>
-                            </>
-                        )}
-
-                        {!isNewRelease && selectedRelease && selectedRelease.features__c && (
-                            <div className="vault-form-group">
-                                <label className="vault-label">Features (from {selectedRelease.name__v})</label>
-                                <pre className="vault-release-preview">{selectedRelease.features__c}</pre>
                                 <div className="vault-text-small vault-text-muted">
-                                    Edit features on the Releases tab.
+                                    New features are saved to the release and automatically assigned to this board.
                                 </div>
                             </div>
                         )}
@@ -244,6 +362,36 @@ export default function CreateBoard({ boardId, navigate, showToast }) {
                     </form>
                 </div>
             </div>
+        </div>
+    );
+}
+
+function FeatureChecklist({ releaseFeatures, selectedIds, onToggle, pending, onRemovePending }) {
+    if (releaseFeatures.length === 0 && pending.length === 0) {
+        return (
+            <div className="vault-text-small vault-text-muted">
+                No features yet. Add one below.
+            </div>
+        );
+    }
+    return (
+        <div className="vault-feature-checklist">
+            {releaseFeatures.map(f => (
+                <label key={f.id} className="vault-feature-checklist__item">
+                    <input
+                        type="checkbox"
+                        checked={selectedIds.has(f.id)}
+                        onChange={() => onToggle(f.id)}
+                    />
+                    <span>{f.display_name__c || f.name__v}</span>
+                </label>
+            ))}
+            {pending.map((name, idx) => (
+                <div key={`pending-${idx}`} className="vault-feature-checklist__item vault-feature-checklist__item--pending">
+                    <span className="vault-chip">{name}<button type="button" onClick={() => onRemovePending(idx)} aria-label="Remove">×</button></span>
+                    <span className="vault-text-small vault-text-muted">(new)</span>
+                </div>
+            ))}
         </div>
     );
 }

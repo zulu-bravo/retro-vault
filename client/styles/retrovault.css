@@ -1595,3 +1595,63 @@
     justify-content: flex-end;
     gap: var(--vault-space-2);
 }
+
+/* ---------- Chips (feature list) ---------- */
+
+.vault-chip-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--vault-space-2);
+}
+
+.vault-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--vault-space-1);
+    padding: 2px var(--vault-space-2);
+    background: var(--vault-gray-100, #eef0f3);
+    border: 1px solid var(--vault-border-color);
+    border-radius: 999px;
+    font-size: var(--vault-font-size-sm);
+    line-height: 1.6;
+}
+
+.vault-chip > button {
+    background: transparent;
+    border: none;
+    color: var(--vault-text-secondary);
+    cursor: pointer;
+    font-size: 1.1em;
+    line-height: 1;
+    padding: 0 2px;
+}
+
+.vault-chip > button:hover {
+    color: var(--vault-danger);
+}
+
+/* ---------- Feature checklist (CreateBoard) ---------- */
+
+.vault-feature-checklist {
+    display: flex;
+    flex-direction: column;
+    gap: var(--vault-space-2);
+    padding: var(--vault-space-3);
+    border: 1px solid var(--vault-border-color);
+    border-radius: var(--vault-border-radius);
+    background: var(--vault-gray-50, #f7f8fa);
+    max-height: 220px;
+    overflow-y: auto;
+}
+
+.vault-feature-checklist__item {
+    display: flex;
+    align-items: center;
+    gap: var(--vault-space-2);
+    font-size: var(--vault-font-size-sm);
+    cursor: pointer;
+}
+
+.vault-feature-checklist__item--pending {
+    cursor: default;
+}

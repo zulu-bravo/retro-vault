@@ -6,14 +6,3 @@ RECREATE Object retro_release__c (
     audit(false),
     description('A software release used to group retro boards across teams')
 );
-
-ALTER Object retro_release__c (
-    add Field features__c (
-        label('Features'),
-        type('String'),
-        max_length(1500),
-        active(true),
-        required(false),
-        list_column(false)
-    )
-);

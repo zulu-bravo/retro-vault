@@ -22,7 +22,7 @@ Repo: `zulu-bravo/retro-vault` on GitHub. Multiple collaborators work on differe
 - `kudos-board` — Kudos column. Merged into main; some follow-up tweaks (column-order swap, gold card highlight removal) pushed.
 - `feature-insights-tab` — Two-tab Vault split (Boards + Insights as separate native Vault tabs). Merged into main as `004232a`.
 - `insights-release-sentiment` — Replaces the old three-panel Insights with a single multi-line release-sentiment chart. X-axis = releases A→Z, Y-axis = vote-weighted Went Well share.
-- `release-teams-tabs` — Splits Insights into two dedicated tabs (Releases, Teams) and introduces a `retro_release__c` object that replaces the per-board `release_tag__c` + `features__c` with a shared release dimension. New tabs at orders 102 / 103.
+- `release-teams-tabs` — Splits Insights into two dedicated tabs (Releases, Teams) and introduces a `retro_release__c` object that replaces the per-board `release_tag__c` with a shared release dimension. Features are modeled as first-class `retro_feature__c` records per release, with a `retro_board_feature__c` junction so each team's board picks only the subset of features it's working on. New tabs at orders 102 / 103.
 
 ## Deployment status
 
@@ -70,7 +70,11 @@ retro_team__c
 
 retro_release__c
   name__v (String, required)                 ← e.g. "26R1.0" (was previously release_tag__c on the board)
-  features__c (String, max_length 1500)      ← newline-separated feature list, shared across all boards linked to this release
+
+retro_feature__c
+  name__v (String, required)                 ← composite "{releaseName} . {featureName}" (tenant-wide unique)
+  display_name__c (String, max_length 200, required)  ← the clean feature label shown in the UI
+  release__c -> retro_release__c (required)  ← every feature belongs to exactly one release
 
 retro_board__c
   name__v (String, required)
@@ -79,6 +83,11 @@ retro_board__c
   release__c -> retro_release__c             ← optional; the shared release dimension
   board_date__c (Date, required)
   status__c (Picklist: board_status__c, required)
+
+retro_board_feature__c                       ← junction: which features is this team working on for this board?
+  name__v (String, required)                 ← composite "{boardId}_{featureId}" (must be unique)
+  retro_board__c -> retro_board__c (required)
+  retro_feature__c -> retro_feature__c (required)
 
 retro_feedback__c
   name__v (String) - summary, must be unique
@@ -225,19 +234,25 @@ curl -L "https://$HOST/api/mdl/execute" -H "Content-Type: text/plain" -H "Author
 
 ### Migrate data from release_tag__c + features__c to retro_release__c
 ```bash
-# After MDL deploy (which adds retro_release__c + release__c on board),
-# populate releases from existing board data, then drop the old fields.
+# First migration (releases): populate retro_release__c, link boards, drop old board fields.
 python3 scripts/migrate_releases.py
-
+python3 scripts/null_old_board_fields.py
 curl -X POST -H "Authorization: $SESSION_ID" -H "Content-Type: text/plain" \
     --data-binary @scripts/migration/drop_old_board_fields.mdl \
+    "https://$HOST/api/mdl/execute"
+
+# Second migration (features): split release.features__c into retro_feature__c
+# records + retro_board_feature__c junction rows, then drop features__c on release.
+python3 scripts/migrate_features.py
+curl -X POST -H "Authorization: $SESSION_ID" -H "Content-Type: text/plain" \
+    --data-binary @scripts/migration/drop_release_features_field.mdl \
     "https://$HOST/api/mdl/execute"
 ```
 
 ## Key files
 
 - `mdl/00_picklists.mdl` - All picklist definitions (deploy first). Includes the `kudos__c` value on `feedback_category__c`.
-- `mdl/01_team.mdl` … `mdl/06_vote.mdl` - Object MDL files. Deployed in filename order so references resolve (team, release, board, feedback, action, vote). Each is `RECREATE Object` shell + N `ALTER Object add Field`.
+- `mdl/01_team.mdl` … `mdl/08_vote.mdl` - Object MDL files. Deployed in filename order so references resolve (team, release, feature, board, board_feature junction, feedback, action, vote). Each is `RECREATE Object` shell + N `ALTER Object add Field`.
 - `client/distribution-manifest.json` - Four pages registered: `retrovault__c`, `retrovault_actions__c`, `retrovault_releases__c`, `retrovault_teams__c`.
 - `client/esbuild.mjs` - Builds four entries (`src/boards.jsx`, `src/actions.jsx`, `src/releases.jsx`, `src/teams.jsx`).
 - `client/src/boards.jsx` / `client/src/actions.jsx` / `client/src/releases.jsx` / `client/src/teams.jsx` - Four `definePage()` entry points.
@@ -245,13 +260,15 @@ curl -X POST -H "Authorization: $SESSION_ID" -H "Content-Type: text/plain" \
 - `client/src/App_Actions.jsx` / `App_Releases.jsx` / `App_Teams.jsx` - Single-view shells for the other three tabs.
 - `client/src/api/vault.js` - `sendEvent` wrapper, `userName(row, prefix)` helper, `searchUsers()` and `loadCurrentUserName()` via `vaultApiClient.fetch`, plus `fetchReleases` / `createRelease` / `updateRelease` helpers.
 - `client/src/components/UserTypeAhead.jsx` - Type-ahead user picker (used for facilitator, assignee, kudos recipient).
-- `client/src/pages/BoardView.jsx` - Most complex page: 4-column layout (Kudos | Went Well | To Improve | Action Items), drag-and-drop, grouping, kudos modal variant. Reads features via the joined `release__cr.features__c`.
-- `client/src/pages/CreateBoard.jsx` - Board form; release picker (existing release dropdown + "+ New release…" inline form). Features are edited on the Releases tab, not here.
-- `client/src/pages/Releases.jsx` - Release Sentiment chart (multi-line SVG, vote-weighted Went Well share per team per release) + a release list with inline-editable features. Served via `retrovault_releases__c` Page / Tab.
+- `client/src/pages/BoardView.jsx` - Most complex page: 4-column layout (Kudos | Went Well | To Improve | Action Items), drag-and-drop, grouping, kudos modal variant. Feedback modal's feature dropdown is populated from the board's `retro_board_feature__c` junction rows (falls back to all features for the release if the board has no assignments yet).
+- `client/src/pages/CreateBoard.jsx` - Board form; release picker + per-board feature multi-select with inline "+ Add feature" (new features are created on the release + auto-assigned to the board via the junction).
+- `client/src/pages/Releases.jsx` - Release Sentiment chart (multi-line SVG, vote-weighted Went Well share per team per release) + a release list where features are managed as chips (add / remove `retro_feature__c` records). Served via `retrovault_releases__c` Page / Tab.
 - `client/src/pages/Teams.jsx` - Star Performers grouped per team (podium + rest table per team). Served via `retrovault_teams__c` Page / Tab.
-- `client/src/pages/SeedData.jsx` - Demo data seeder (now creates releases first, then links boards).
-- `scripts/migrate_releases.py` - One-time data migration: existing `release_tag__c` / `features__c` on boards → new `retro_release__c` records + `release__c` join. Features across boards with the same tag are unioned (unique non-blank lines).
-- `scripts/migration/drop_old_board_fields.mdl` - MDL to drop `release_tag__c` + `features__c` from `retro_board__c` after migration is verified.
+- `client/src/pages/SeedData.jsx` - Demo data seeder. Creates releases → features-per-release → boards → board↔feature junction rows for team-subset scoping.
+- `scripts/migrate_releases.py` - First migration: existing `release_tag__c` / `features__c` on boards → new `retro_release__c` records + `release__c` join. Features across boards with the same tag are unioned.
+- `scripts/migrate_features.py` - Second migration: parse each release's `features__c` text into `retro_feature__c` records + backfill `retro_board_feature__c` junction rows using a team-name heuristic (see `TEAM_FEATURE_SETS` in the script).
+- `scripts/migration/drop_old_board_fields.mdl` - MDL to drop `release_tag__c` + `features__c` from `retro_board__c` after the first migration.
+- `scripts/migration/drop_release_features_field.mdl` - MDL to drop `features__c` from `retro_release__c` after the second migration.
 - `server/src/main/java/com/veeva/vault/custom/RetroVaultPageController.java` - onLoad + onEvent dispatch.
 
 ## Vault Java SDK constraints (learned the hard way)
@@ -276,7 +293,7 @@ The SDK enforces a sandbox at validation time. Things the controller **cannot** 
 - The `@veeva/vault` npm package version in `client/package.json` is `26.1.0-release.1.3.5` — verify this matches what the target Vault instance supports.
 - VQL syntax in `client/src/api/vault.js` was originally written from docs — verify each field actually exists on the deployed object via `get_object_fields` or VQL when adding new fields.
 - The PageController uses a whitelist of objects — if new objects are added to the MDL, update `isAllowedObject` AND `assertVqlWhitelisted` in `RetroVaultPageController.java`.
-- `name__v` on `retro_feedback__c` and `retro_action__c` enforces uniqueness — seed/create code must generate unique names (suffix with team + release if needed).
+- `name__v` enforces tenant-wide uniqueness on `retro_feedback__c`, `retro_action__c`, and `retro_feature__c` — seed/create code must generate unique names. `retro_feature__c` stores a composite `{releaseName} . {featureName}` in `name__v` and the bare label in `display_name__c` (which the UI reads).
 - String fields cap at `max_length(1500)` on this Vault.
 
 ## Tools expected in the new session

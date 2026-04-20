@@ -4,6 +4,8 @@ import {
     fetchFeedbackForBoard,
     fetchActionsForBoard,
     fetchVotesForUser,
+    fetchBoardFeatures,
+    fetchFeaturesForRelease,
     userName,
     create,
     update,
@@ -77,6 +79,7 @@ export default function BoardView({ boardId, highlightActionId, navigate, showTo
     const [feedback, setFeedback] = useState([]);
     const [actions, setActions] = useState([]);
     const [userVotes, setUserVotes] = useState({}); // feedbackItemId -> voteRecordId
+    const [boardFeatureNames, setBoardFeatureNames] = useState([]);
 
     const [fbModal, setFbModal] = useState(null); // { category } or { id, category }
     const [fbContent, setFbContent] = useState('');
@@ -115,13 +118,26 @@ export default function BoardView({ boardId, highlightActionId, navigate, showTo
 
     const loadData = useCallback(async () => {
         try {
-            const [b, f, a, v] = await Promise.all([
+            const [b, f, a, v, bf] = await Promise.all([
                 fetchBoard(boardId),
                 fetchFeedbackForBoard(boardId),
                 fetchActionsForBoard(boardId),
-                currentUserId ? fetchVotesForUser(currentUserId) : Promise.resolve([])
+                currentUserId ? fetchVotesForUser(currentUserId) : Promise.resolve([]),
+                fetchBoardFeatures(boardId),
             ]);
             setBoard(b);
+            // Feature dropdown for the feedback modal: use the board's junction list.
+            // If empty, fall back to all features for the board's release so authors
+            // still have a menu to pick from.
+            let featureNames = bf
+                .map(x => x['retro_feature__cr.display_name__c'] || x['retro_feature__cr.name__v'])
+                .filter(Boolean)
+                .sort();
+            if (featureNames.length === 0 && b?.release__c) {
+                const relFeats = await fetchFeaturesForRelease(b.release__c);
+                featureNames = relFeats.map(x => x.display_name__c || x.name__v).sort();
+            }
+            setBoardFeatureNames(featureNames);
             setFeedback(f.sort((x, y) => {
                 const xO = x.order__c != null ? Number(x.order__c) : Infinity;
                 const yO = y.order__c != null ? Number(y.order__c) : Infinity;
@@ -991,10 +1007,7 @@ export default function BoardView({ boardId, highlightActionId, navigate, showTo
 
             {/* Feedback Modal */}
             {fbModal && (() => {
-                const boardFeatures = (board?.['release__cr.features__c'] || '')
-                    .split('\n')
-                    .map(s => s.trim())
-                    .filter(Boolean);
+                const boardFeatures = boardFeatureNames;
                 const isKudos = fbModal.category === KUDOS_CATEGORY;
                 const titleLabel = isKudos
                     ? (fbModal.id ? 'Edit Kudos' : 'Give Kudos 🎉')
