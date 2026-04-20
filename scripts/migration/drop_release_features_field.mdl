@@ -1,0 +1,3 @@
+ALTER Object retro_release__c (
+    drop Field features__c
+);

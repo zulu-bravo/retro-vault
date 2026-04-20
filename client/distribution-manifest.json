@@ -6,12 +6,16 @@
             "file": "dist/boards.js"
         },
         {
-            "name": "retrovault_insights__c",
-            "file": "dist/insights.js"
-        },
-        {
             "name": "retrovault_actions__c",
             "file": "dist/actions.js"
+        },
+        {
+            "name": "retrovault_releases__c",
+            "file": "dist/releases.js"
+        },
+        {
+            "name": "retrovault_teams__c",
+            "file": "dist/teams.js"
         }
     ],
     "stylesheets": [

@@ -1,0 +1,32 @@
+RECREATE Object retro_board_feature__c (
+    label('Board Feature'),
+    label_plural('Board Features'),
+    active(true),
+    in_menu(false),
+    audit(false),
+    description('Junction: a feature assigned to a retro board (the team works on this feature for this release)')
+);
+
+ALTER Object retro_board_feature__c (
+    add Field retro_board__c (
+        label('Retro Board'),
+        type('ObjectReference'),
+        object('retro_board__c'),
+        relationship_type('reference'),
+        active(true),
+        required(true),
+        list_column(false)
+    )
+);
+
+ALTER Object retro_board_feature__c (
+    add Field retro_feature__c (
+        label('Feature'),
+        type('ObjectReference'),
+        object('retro_feature__c'),
+        relationship_type('reference'),
+        active(true),
+        required(true),
+        list_column(false)
+    )
+);

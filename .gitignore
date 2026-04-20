@@ -1,6 +1,7 @@
 __pycache__/
 *.pyc
 .env
+.deploy.env
 .DS_Store
 client/node_modules/
 client/dist/

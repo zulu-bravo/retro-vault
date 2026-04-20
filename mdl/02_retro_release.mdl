@@ -1,0 +1,8 @@
+RECREATE Object retro_release__c (
+    label('Release'),
+    label_plural('Releases'),
+    active(true),
+    in_menu(true),
+    audit(false),
+    description('A software release used to group retro boards across teams')
+);

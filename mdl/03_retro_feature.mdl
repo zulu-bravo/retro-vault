@@ -1,0 +1,31 @@
+RECREATE Object retro_feature__c (
+    label('Feature'),
+    label_plural('Features'),
+    active(true),
+    in_menu(true),
+    audit(false),
+    description('A feature delivered in a release')
+);
+
+ALTER Object retro_feature__c (
+    add Field release__c (
+        label('Release'),
+        type('ObjectReference'),
+        object('retro_release__c'),
+        relationship_type('reference'),
+        active(true),
+        required(true),
+        list_column(false)
+    )
+);
+
+ALTER Object retro_feature__c (
+    add Field display_name__c (
+        label('Display Name'),
+        type('String'),
+        max_length(200),
+        active(true),
+        required(true),
+        list_column(false)
+    )
+);

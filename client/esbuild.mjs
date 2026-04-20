@@ -1,9 +1,14 @@
 // esbuild.mjs - Bundle RetroVault client code for Vault Custom Pages.
-// Three entries: one per Vault Page (Boards, Insights, Actions).
+// One entry per Vault Page (Boards, Actions, Releases, Teams).
 import * as esbuild from 'esbuild';
 
 await esbuild.build({
-    entryPoints: ['src/boards.jsx', 'src/insights.jsx', 'src/actions.jsx'],
+    entryPoints: [
+        'src/boards.jsx',
+        'src/actions.jsx',
+        'src/releases.jsx',
+        'src/teams.jsx',
+    ],
     bundle: true,
     sourcemap: true,
     outdir: 'dist',
@@ -14,4 +19,4 @@ await esbuild.build({
     target: ['es2020']
 });
 
-console.log('Build complete: dist/boards.js, dist/insights.js, dist/actions.js');
+console.log('Build complete: dist/boards.js, dist/actions.js, dist/releases.js, dist/teams.js');
