@@ -7,9 +7,8 @@ import {
 } from '../api/vault';
 import Spinner from '../components/Spinner';
 import UserTypeAhead from '../components/UserTypeAhead';
+import { Combobox, ComboboxMulti } from '../components/Combobox';
 import { toISODate } from '../utils/format';
-
-const NEW_RELEASE = '__new__';
 
 export default function CreateBoard({ boardId, navigate, showToast }) {
     const isEdit = !!boardId;
@@ -25,17 +24,13 @@ export default function CreateBoard({ boardId, navigate, showToast }) {
     const [facilitatorId, setFacilitatorId] = useState('');
     const [facilitatorDisplay, setFacilitatorDisplay] = useState('');
     const [releaseId, setReleaseId] = useState('');
-    const [newReleaseName, setNewReleaseName] = useState('');
     const [boardDate, setBoardDate] = useState(toISODate(new Date()));
     const [status, setStatus] = useState('active__c');
 
     // Features belonging to the currently-selected release (persisted records).
     const [releaseFeatures, setReleaseFeatures] = useState([]);
-    // Feature IDs currently selected for this board (checked checkboxes).
+    // Feature IDs currently selected for this board.
     const [selectedFeatureIds, setSelectedFeatureIds] = useState(() => new Set());
-    // Pending feature names typed in but not yet saved (used for new release or to add to existing release).
-    const [pendingFeatureNames, setPendingFeatureNames] = useState([]);
-    const [newFeatureDraft, setNewFeatureDraft] = useState('');
     // When editing an existing board, track which junction rows exist so we can diff on save.
     const [existingBoardFeatures, setExistingBoardFeatures] = useState([]);
     const [loadingFeatures, setLoadingFeatures] = useState(false);
@@ -79,11 +74,10 @@ export default function CreateBoard({ boardId, navigate, showToast }) {
         })();
     }, [boardId]);
 
-    // Load release features when the picker changes to an existing release.
+    // Load release features when the release selection changes.
     useEffect(() => {
-        if (!releaseId || releaseId === NEW_RELEASE) {
+        if (!releaseId) {
             setReleaseFeatures([]);
-            // Keep pendingFeatureNames — they roll over into the new release if user picked that path.
             return;
         }
         let cancelled = false;
@@ -101,36 +95,60 @@ export default function CreateBoard({ boardId, navigate, showToast }) {
         return () => { cancelled = true; };
     }, [releaseId]);
 
-    const isNewRelease = releaseId === NEW_RELEASE;
-
-    function toggleFeature(fid) {
+    function addFeature(fid) {
         setSelectedFeatureIds(prev => {
+            if (prev.has(fid)) return prev;
             const next = new Set(prev);
-            if (next.has(fid)) next.delete(fid);
-            else next.add(fid);
+            next.add(fid);
             return next;
         });
     }
 
-    function handleAddPendingFeature() {
-        const v = newFeatureDraft.trim();
-        if (!v) return;
-        // de-duplicate against already-existing release features + other pending names
-        const existingNames = new Set([
-            ...releaseFeatures.map(f => (f.display_name__c || f.name__v).toLowerCase()),
-            ...pendingFeatureNames.map(n => n.toLowerCase()),
-        ]);
-        if (existingNames.has(v.toLowerCase())) {
-            showToast && showToast(`"${v}" already exists`, 'info');
-            setNewFeatureDraft('');
-            return;
-        }
-        setPendingFeatureNames(prev => [...prev, v]);
-        setNewFeatureDraft('');
+    function removeFeature(fid) {
+        setSelectedFeatureIds(prev => {
+            if (!prev.has(fid)) return prev;
+            const next = new Set(prev);
+            next.delete(fid);
+            return next;
+        });
     }
 
-    function removePendingFeature(idx) {
-        setPendingFeatureNames(prev => prev.filter((_, i) => i !== idx));
+    async function handleCreateRelease(releaseName) {
+        try {
+            const id = await createRelease(releaseName);
+            setReleases(prev => [...prev, { id, name__v: releaseName }]);
+            setReleaseId(id);
+            setSelectedFeatureIds(new Set());
+            showToast && showToast(`Release "${releaseName}" created`, 'success');
+            return id;
+        } catch (err) {
+            showToast && showToast('Failed to create release: ' + err.message, 'error');
+            return null;
+        }
+    }
+
+    async function handleCreateFeature(featureName) {
+        if (!releaseId) {
+            showToast && showToast('Pick a release before adding features', 'info');
+            return null;
+        }
+        try {
+            const release = releases.find(r => r.id === releaseId);
+            const id = await createFeature(featureName, releaseId, release ? release.name__v : '');
+            const newRow = {
+                id,
+                name__v: `${release ? release.name__v : releaseId} . ${featureName}`,
+                display_name__c: featureName,
+                release__c: releaseId,
+            };
+            setReleaseFeatures(prev => [...prev, newRow]);
+            addFeature(id);
+            showToast && showToast(`Feature "${featureName}" added to release`, 'success');
+            return id;
+        } catch (err) {
+            showToast && showToast('Failed to create feature: ' + err.message, 'error');
+            return null;
+        }
     }
 
     async function handleSubmit(e) {
@@ -139,40 +157,18 @@ export default function CreateBoard({ boardId, navigate, showToast }) {
             showToast('Please fill in all required fields.', 'error');
             return;
         }
-        if (isNewRelease && !newReleaseName.trim()) {
-            showToast('Please enter a name for the new release.', 'error');
-            return;
-        }
         setSubmitting(true);
         try {
-            // 1. Resolve release ID (create new release if needed).
-            let finalReleaseId = releaseId && releaseId !== NEW_RELEASE ? releaseId : null;
-            let finalReleaseName = '';
-            if (isNewRelease) {
-                finalReleaseName = newReleaseName.trim();
-                finalReleaseId = await createRelease(finalReleaseName);
-            } else if (finalReleaseId) {
-                const selected = releases.find(r => r.id === finalReleaseId);
-                finalReleaseName = selected ? selected.name__v : '';
-            }
-
-            // 2. Create any pending feature records on the release.
-            const newlyCreatedFeatureIds = [];
-            if (finalReleaseId) {
-                for (const pName of pendingFeatureNames) {
-                    const fid = await createFeature(pName, finalReleaseId, finalReleaseName);
-                    newlyCreatedFeatureIds.push(fid);
-                }
-            }
-
-            // 3. Create/update the board itself.
+            // Release and features are already persisted — the comboboxes create
+            // them inline. Here we only save the board + diff the board-feature
+            // junction.
             const fields = {
                 name__v: name,
                 team__c: teamId,
                 facilitator__c: facilitatorId,
                 board_date__c: boardDate,
                 status__c: status,
-                release__c: finalReleaseId,
+                release__c: releaseId || null,
             };
             let savedBoardId = boardId;
             if (isEdit) {
@@ -181,19 +177,14 @@ export default function CreateBoard({ boardId, navigate, showToast }) {
                 savedBoardId = await create('retro_board__c', fields);
             }
 
-            // 4. Diff feature assignments on this board.
-            const desiredFeatureIds = new Set([...selectedFeatureIds, ...newlyCreatedFeatureIds]);
             const existingByFeatureId = new Map(existingBoardFeatures.map(bf => [bf.retro_feature__c, bf.id]));
-
-            // Assign newly-selected features
-            for (const fid of desiredFeatureIds) {
+            for (const fid of selectedFeatureIds) {
                 if (!existingByFeatureId.has(fid)) {
                     await assignFeatureToBoard(savedBoardId, fid);
                 }
             }
-            // Remove de-selected features
             for (const [fid, junctionId] of existingByFeatureId.entries()) {
-                if (!desiredFeatureIds.has(fid)) {
+                if (!selectedFeatureIds.has(fid)) {
                     await unassignFeatureFromBoard(junctionId);
                 }
             }
@@ -208,7 +199,12 @@ export default function CreateBoard({ boardId, navigate, showToast }) {
 
     if (loading) return <Spinner />;
 
-    const showFeatureSection = isNewRelease || !!releaseId;
+    const showFeatureSection = !!releaseId;
+    const releaseOptions = releases.map(r => ({ id: r.id, label: r.name__v }));
+    const featureOptions = releaseFeatures.map(f => ({
+        id: f.id,
+        label: f.display_name__c || f.name__v,
+    }));
 
     return (
         <div style={{ maxWidth: 640 }}>
@@ -261,35 +257,17 @@ export default function CreateBoard({ boardId, navigate, showToast }) {
 
                         <div className="vault-form-group">
                             <label className="vault-label">Release</label>
-                            <select
-                                className="vault-select"
+                            <Combobox
                                 value={releaseId}
-                                onChange={(e) => {
-                                    setReleaseId(e.target.value);
+                                options={releaseOptions}
+                                onChange={(id) => {
+                                    setReleaseId(id);
                                     setSelectedFeatureIds(new Set());
-                                    setPendingFeatureNames([]);
                                 }}
-                            >
-                                <option value="">No release</option>
-                                {releases.map(r => (
-                                    <option key={r.id} value={r.id}>{r.name__v}</option>
-                                ))}
-                                <option value={NEW_RELEASE}>+ New release…</option>
-                            </select>
+                                onCreate={handleCreateRelease}
+                                placeholder="Search or create a release…"
+                            />
                         </div>
-
-                        {isNewRelease && (
-                            <div className="vault-form-group">
-                                <label className="vault-label">New Release Name *</label>
-                                <input
-                                    className="vault-input"
-                                    type="text"
-                                    placeholder="e.g., 26R1.0"
-                                    value={newReleaseName}
-                                    onChange={(e) => setNewReleaseName(e.target.value)}
-                                />
-                            </div>
-                        )}
 
                         {showFeatureSection && (
                             <div className="vault-form-group">
@@ -297,30 +275,17 @@ export default function CreateBoard({ boardId, navigate, showToast }) {
                                 {loadingFeatures ? (
                                     <Spinner />
                                 ) : (
-                                    <FeaturePicker
-                                        releaseFeatures={releaseFeatures}
-                                        selectedIds={selectedFeatureIds}
-                                        onSelect={(fid) => toggleFeature(fid)}
-                                        onDeselect={(fid) => toggleFeature(fid)}
-                                        pending={pendingFeatureNames}
-                                        onRemovePending={removePendingFeature}
+                                    <ComboboxMulti
+                                        values={[...selectedFeatureIds]}
+                                        options={featureOptions}
+                                        onAdd={addFeature}
+                                        onRemove={removeFeature}
+                                        onCreate={handleCreateFeature}
+                                        placeholder="Search or create a feature…"
                                     />
                                 )}
-                                <div className="vault-flex vault-gap-8 vault-mt-8">
-                                    <input
-                                        className="vault-input"
-                                        type="text"
-                                        placeholder="Add a new feature…"
-                                        value={newFeatureDraft}
-                                        onChange={e => setNewFeatureDraft(e.target.value)}
-                                        onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); handleAddPendingFeature(); } }}
-                                    />
-                                    <button type="button" className="vault-btn vault-btn--secondary" onClick={handleAddPendingFeature}>
-                                        Add
-                                    </button>
-                                </div>
-                                <div className="vault-text-small vault-text-muted">
-                                    New features are saved to the release and automatically assigned to this board.
+                                <div className="vault-text-small vault-text-muted vault-mt-8">
+                                    New features are created on the release and auto-assigned to this board.
                                 </div>
                             </div>
                         )}
@@ -367,59 +332,3 @@ export default function CreateBoard({ boardId, navigate, showToast }) {
     );
 }
 
-function FeaturePicker({ releaseFeatures, selectedIds, onSelect, onDeselect, pending, onRemovePending }) {
-    const selected = releaseFeatures.filter(f => selectedIds.has(f.id))
-        .sort((a, b) => (a.display_name__c || a.name__v).localeCompare(b.display_name__c || b.name__v));
-    const available = releaseFeatures.filter(f => !selectedIds.has(f.id))
-        .sort((a, b) => (a.display_name__c || a.name__v).localeCompare(b.display_name__c || b.name__v));
-
-    const nothingPicked = selected.length === 0 && pending.length === 0;
-
-    return (
-        <div className="vault-feature-picker">
-            {nothingPicked ? (
-                <div className="vault-text-small vault-text-muted vault-feature-picker__empty">
-                    None selected yet.
-                </div>
-            ) : (
-                <div className="vault-chip-list vault-feature-picker__chips">
-                    {selected.map(f => (
-                        <span key={f.id} className="vault-chip">
-                            {f.display_name__c || f.name__v}
-                            <button
-                                type="button"
-                                aria-label={`Unselect ${f.display_name__c || f.name__v}`}
-                                title="Remove from this board"
-                                onClick={() => onDeselect(f.id)}
-                            >×</button>
-                        </span>
-                    ))}
-                    {pending.map((name, idx) => (
-                        <span key={`pending-${idx}`} className="vault-chip vault-chip--pending" title="New — will be created on save">
-                            {name}
-                            <span className="vault-chip__badge">new</span>
-                            <button type="button" aria-label={`Remove ${name}`} onClick={() => onRemovePending(idx)}>×</button>
-                        </span>
-                    ))}
-                </div>
-            )}
-            <select
-                className="vault-select vault-feature-picker__select"
-                value=""
-                onChange={(e) => {
-                    if (e.target.value) onSelect(e.target.value);
-                }}
-                disabled={available.length === 0}
-            >
-                <option value="">
-                    {available.length === 0
-                        ? (releaseFeatures.length === 0 ? 'No features on this release yet' : 'All features selected')
-                        : 'Select a feature to add…'}
-                </option>
-                {available.map(f => (
-                    <option key={f.id} value={f.id}>{f.display_name__c || f.name__v}</option>
-                ))}
-            </select>
-        </div>
-    );
-}
