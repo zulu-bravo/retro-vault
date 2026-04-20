@@ -297,10 +297,11 @@ export default function CreateBoard({ boardId, navigate, showToast }) {
                                 {loadingFeatures ? (
                                     <Spinner />
                                 ) : (
-                                    <FeatureChecklist
+                                    <FeaturePicker
                                         releaseFeatures={releaseFeatures}
                                         selectedIds={selectedFeatureIds}
-                                        onToggle={toggleFeature}
+                                        onSelect={(fid) => toggleFeature(fid)}
+                                        onDeselect={(fid) => toggleFeature(fid)}
                                         pending={pendingFeatureNames}
                                         onRemovePending={removePendingFeature}
                                     />
@@ -366,32 +367,59 @@ export default function CreateBoard({ boardId, navigate, showToast }) {
     );
 }
 
-function FeatureChecklist({ releaseFeatures, selectedIds, onToggle, pending, onRemovePending }) {
-    if (releaseFeatures.length === 0 && pending.length === 0) {
-        return (
-            <div className="vault-text-small vault-text-muted">
-                No features yet. Add one below.
-            </div>
-        );
-    }
+function FeaturePicker({ releaseFeatures, selectedIds, onSelect, onDeselect, pending, onRemovePending }) {
+    const selected = releaseFeatures.filter(f => selectedIds.has(f.id))
+        .sort((a, b) => (a.display_name__c || a.name__v).localeCompare(b.display_name__c || b.name__v));
+    const available = releaseFeatures.filter(f => !selectedIds.has(f.id))
+        .sort((a, b) => (a.display_name__c || a.name__v).localeCompare(b.display_name__c || b.name__v));
+
+    const nothingPicked = selected.length === 0 && pending.length === 0;
+
     return (
-        <div className="vault-feature-checklist">
-            {releaseFeatures.map(f => (
-                <label key={f.id} className="vault-feature-checklist__item">
-                    <input
-                        type="checkbox"
-                        checked={selectedIds.has(f.id)}
-                        onChange={() => onToggle(f.id)}
-                    />
-                    <span>{f.display_name__c || f.name__v}</span>
-                </label>
-            ))}
-            {pending.map((name, idx) => (
-                <div key={`pending-${idx}`} className="vault-feature-checklist__item vault-feature-checklist__item--pending">
-                    <span className="vault-chip">{name}<button type="button" onClick={() => onRemovePending(idx)} aria-label="Remove">×</button></span>
-                    <span className="vault-text-small vault-text-muted">(new)</span>
+        <div className="vault-feature-picker">
+            {nothingPicked ? (
+                <div className="vault-text-small vault-text-muted vault-feature-picker__empty">
+                    None selected yet.
                 </div>
-            ))}
+            ) : (
+                <div className="vault-chip-list vault-feature-picker__chips">
+                    {selected.map(f => (
+                        <span key={f.id} className="vault-chip">
+                            {f.display_name__c || f.name__v}
+                            <button
+                                type="button"
+                                aria-label={`Unselect ${f.display_name__c || f.name__v}`}
+                                title="Remove from this board"
+                                onClick={() => onDeselect(f.id)}
+                            >×</button>
+                        </span>
+                    ))}
+                    {pending.map((name, idx) => (
+                        <span key={`pending-${idx}`} className="vault-chip vault-chip--pending" title="New — will be created on save">
+                            {name}
+                            <span className="vault-chip__badge">new</span>
+                            <button type="button" aria-label={`Remove ${name}`} onClick={() => onRemovePending(idx)}>×</button>
+                        </span>
+                    ))}
+                </div>
+            )}
+            <select
+                className="vault-select vault-feature-picker__select"
+                value=""
+                onChange={(e) => {
+                    if (e.target.value) onSelect(e.target.value);
+                }}
+                disabled={available.length === 0}
+            >
+                <option value="">
+                    {available.length === 0
+                        ? (releaseFeatures.length === 0 ? 'No features on this release yet' : 'All features selected')
+                        : 'Select a feature to add…'}
+                </option>
+                {available.map(f => (
+                    <option key={f.id} value={f.id}>{f.display_name__c || f.name__v}</option>
+                ))}
+            </select>
         </div>
     );
 }

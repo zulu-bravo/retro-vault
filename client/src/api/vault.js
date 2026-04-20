@@ -129,7 +129,7 @@ export async function fetchTeams() {
 
 export async function fetchReleases() {
     return query(
-        "SELECT id, name__v FROM retro_release__c ORDER BY name__v ASC"
+        "SELECT id, name__v FROM retro_release__c ORDER BY name__v DESC"
     );
 }
 
@@ -199,6 +199,12 @@ export async function assignFeatureToBoard(boardId, featureId) {
 
 export async function unassignFeatureFromBoard(junctionId) {
     return deleteRecord('retro_board_feature__c', junctionId);
+}
+
+export async function fetchAllBoardFeatures() {
+    return query(
+        "SELECT id, retro_board__c, retro_feature__c FROM retro_board_feature__c"
+    );
 }
 
 // Note: this Vault's SDK blocks direct queries on `user__sys`, so we pull
@@ -303,7 +309,7 @@ export function userName(row, prefix) {
 
 export async function fetchAllFeedback() {
     return query(
-        "SELECT id, retro_board__c, category__c, theme__c, content__c, vote_count__c, " +
+        "SELECT id, retro_board__c, category__c, theme__c, content__c, feature__c, vote_count__c, " +
         "kudos_recipient__c, kudos_recipient__cr.name__v " +
         "FROM retro_feedback__c"
     );

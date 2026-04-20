@@ -4,11 +4,11 @@
 // Below the chart: a list of releases with inline-editable features.
 import React, { useEffect, useState, useMemo } from 'react';
 import {
-    fetchAllFeedback, fetchFeedbackForBoard, fetchBoards, fetchTeams,
-    fetchReleases, fetchFeatures, createFeature, deleteFeature, userName,
+    fetchAllFeedback, fetchAllActions, fetchBoards, fetchTeams,
+    fetchReleases, fetchFeatures, fetchAllBoardFeatures,
+    deleteFeature,
 } from '../api/vault';
 import Spinner, { EmptyState } from '../components/Spinner';
-import { ThemeBadge } from '../components/Badge';
 
 const TEAM_PALETTE = [
     'var(--vault-success)',
@@ -26,22 +26,25 @@ export default function Releases({ showToast }) {
     const [teams, setTeams] = useState([]);
     const [releases, setReleases] = useState([]);
     const [features, setFeatures] = useState([]);
+    const [boardFeatures, setBoardFeatures] = useState([]);
+    const [actions, setActions] = useState([]);
     const [hover, setHover] = useState(null);
     const [hiddenTeams, setHiddenTeams] = useState(() => new Set());
-    const [drillDown, setDrillDown] = useState(null);
-    const [drillFeedback, setDrillFeedback] = useState(null);
 
     useEffect(() => {
         (async () => {
             try {
-                const [f, b, t, r, ft] = await Promise.all([
-                    fetchAllFeedback(), fetchBoards(), fetchTeams(), fetchReleases(), fetchFeatures(),
+                const [f, b, t, r, ft, bf, a] = await Promise.all([
+                    fetchAllFeedback(), fetchBoards(), fetchTeams(), fetchReleases(),
+                    fetchFeatures(), fetchAllBoardFeatures(), fetchAllActions(),
                 ]);
                 setFeedback(f);
                 setBoards(b);
                 setTeams(t);
                 setReleases(r);
                 setFeatures(ft);
+                setBoardFeatures(bf);
+                setActions(a);
             } catch (err) {
                 showToast && showToast('Failed to load releases: ' + err.message, 'error');
                 console.error(err);
@@ -75,49 +78,22 @@ export default function Releases({ showToast }) {
         setHiddenTeams(new Set());
     }
 
-    async function handleDrillDown(point, teamName, teamColor) {
-        if (!point || !point.boardId) return;
-        setDrillDown({ boardId: point.boardId, boardName: point.boardName || point.release, teamName, teamColor, release: point.release });
-        setDrillFeedback(null);
+    function openBoardInBoardsTab(boardId) {
+        if (!boardId) return;
         try {
-            const items = await fetchFeedbackForBoard(point.boardId);
-            setDrillFeedback(items);
-        } catch (err) {
-            showToast && showToast('Failed to load board feedback: ' + err.message, 'error');
-            setDrillFeedback([]);
+            const top = window.top;
+            const tabCollection = new URLSearchParams(top.location.search).get('tab-collection');
+            const search = tabCollection ? '?tab-collection=' + encodeURIComponent(tabCollection) : '';
+            top.location.href = top.location.origin + '/ui/' + search + '#custom/page/retrovault/' + encodeURIComponent(boardId);
+        } catch (e) {
+            showToast && showToast('Cannot navigate: ' + e.message, 'error');
         }
     }
 
-    function closeDrillDown() {
-        setDrillDown(null);
-        setDrillFeedback(null);
-    }
-
-    async function handleAddFeature(releaseId, name) {
-        const trimmed = name.trim();
-        if (!trimmed) return;
-        const dupes = features.some(f => f.release__c === releaseId && (f.display_name__c || f.name__v).toLowerCase() === trimmed.toLowerCase());
-        if (dupes) {
-            showToast && showToast(`"${trimmed}" already exists on this release`, 'info');
+    async function handleDeleteFeature(featureId, featureName) {
+        if (!window.confirm(`Remove "${featureName}" from this release? This cannot be undone.`)) {
             return;
         }
-        try {
-            const release = releases.find(r => r.id === releaseId);
-            const id = await createFeature(trimmed, releaseId, release ? release.name__v : '');
-            setFeatures(prev => [...prev, {
-                id,
-                name__v: `${release ? release.name__v : releaseId} . ${trimmed}`,
-                display_name__c: trimmed,
-                release__c: releaseId,
-                'release__cr.name__v': release ? release.name__v : '',
-            }]);
-            showToast && showToast('Feature added', 'success');
-        } catch (err) {
-            showToast && showToast('Failed to add feature: ' + err.message, 'error');
-        }
-    }
-
-    async function handleDeleteFeature(featureId) {
         try {
             await deleteFeature(featureId);
             setFeatures(prev => prev.filter(f => f.id !== featureId));
@@ -153,7 +129,12 @@ export default function Releases({ showToast }) {
                                 onIsolate={isolateTeam}
                                 onShowAll={showAll}
                             />
-                            <SentimentChart chart={{ ...chart, series: visibleSeries }} hover={hover} setHover={setHover} onSelect={handleDrillDown} />
+                            <SentimentChart
+                                chart={{ ...chart, series: visibleSeries }}
+                                hover={hover}
+                                setHover={setHover}
+                                onOpenBoard={openBoardInBoardsTab}
+                            />
                         </>
                     )}
                 </div>
@@ -162,18 +143,13 @@ export default function Releases({ showToast }) {
             <ReleaseListPanel
                 releases={releases}
                 boards={boards}
+                teams={teams}
                 features={features}
-                onAddFeature={handleAddFeature}
+                feedback={feedback}
+                boardFeatures={boardFeatures}
+                actions={actions}
                 onDeleteFeature={handleDeleteFeature}
             />
-
-            {drillDown && (
-                <DrillDownPanel
-                    drillDown={drillDown}
-                    feedback={drillFeedback}
-                    onClose={closeDrillDown}
-                />
-            )}
         </>
     );
 }
@@ -293,7 +269,7 @@ function Legend({ teams, hiddenTeams, onToggle, onIsolate, onShowAll }) {
     );
 }
 
-function SentimentChart({ chart, hover, setHover, onSelect }) {
+function SentimentChart({ chart, hover, setHover, onOpenBoard }) {
     const { releases, series } = chart;
     const W = 800, H = 320;
     const PADDING = { top: 16, right: 24, bottom: 48, left: 44 };
@@ -307,8 +283,19 @@ function SentimentChart({ chart, hover, setHover, onSelect }) {
 
     const yTicks = [0, 25, 50, 75, 100];
 
+    // Cancel tooltip dismiss when the cursor leaves the marker only to re-enter
+    // the tooltip card itself (so the button inside the tooltip is reachable).
+    const dismissTimer = React.useRef(null);
+    function scheduleDismiss() {
+        clearTimeout(dismissTimer.current);
+        dismissTimer.current = setTimeout(() => setHover(null), 120);
+    }
+    function cancelDismiss() {
+        clearTimeout(dismissTimer.current);
+    }
+
     return (
-        <div className="vault-chart" onMouseLeave={() => setHover(null)}>
+        <div className="vault-chart" onMouseLeave={scheduleDismiss}>
             <svg className="vault-chart__svg" viewBox={`0 0 ${W} ${H}`} role="img" aria-label="Release sentiment by team">
                 <rect x={PADDING.left} y={PADDING.top} width={plotW} height={yAt(75) - PADDING.top} className="vault-chart__zone vault-chart__zone--positive" />
                 <rect x={PADDING.left} y={yAt(25)} width={plotW} height={yAt(0) - yAt(25)} className="vault-chart__zone vault-chart__zone--negative" />
@@ -361,19 +348,28 @@ function SentimentChart({ chart, hover, setHover, onSelect }) {
                                         cx={cx} cy={cy} r="14"
                                         fill="transparent"
                                         style={{ cursor: 'pointer' }}
-                                        onMouseEnter={() => setHover({ teamId: s.teamId, teamName: s.teamName, color: s.color, ...p })}
-                                        onClick={() => onSelect && onSelect(p, s.teamName, s.color)}
+                                        onMouseEnter={() => { cancelDismiss(); setHover({ teamId: s.teamId, teamName: s.teamName, color: s.color, ...p }); }}
+                                        onMouseLeave={scheduleDismiss}
                                     />
                                 </g>
                             );
                         })}
                     </g>
                 ))}
-
-                {hover && hover.sentiment !== null && (
-                    <Tooltip x={xAt(hover.x)} y={yAt(hover.sentiment)} hover={hover} chartW={W} />
-                )}
             </svg>
+
+            {hover && hover.sentiment !== null && (
+                <Tooltip
+                    hover={hover}
+                    vbW={W}
+                    vbH={H}
+                    xPct={(xAt(hover.x) / W) * 100}
+                    yPct={(yAt(hover.sentiment) / H) * 100}
+                    onOpenBoard={onOpenBoard}
+                    onMouseEnter={cancelDismiss}
+                    onMouseLeave={scheduleDismiss}
+                />
+            )}
         </div>
     );
 }
@@ -393,102 +389,118 @@ function buildSegments(points) {
     return segs;
 }
 
-function Tooltip({ x, y, hover, chartW }) {
-    const W = 220, H = 72;
-    const onRight = x + W + 12 > chartW;
-    const tx = onRight ? x - W - 12 : x + 12;
-    const ty = Math.max(8, y - H / 2);
+function Tooltip({ hover, xPct, yPct, onOpenBoard, onMouseEnter, onMouseLeave }) {
+    // Flip horizontally so the card stays within the chart bounds.
+    const onLeft = xPct > 60;
+    const style = {
+        left: `${xPct}%`,
+        top: `${yPct}%`,
+        transform: `translate(${onLeft ? 'calc(-100% - 12px)' : '12px'}, -50%)`,
+    };
 
     return (
-        <g className="vault-chart__tooltip" pointerEvents="none">
-            <rect x={tx} y={ty} width={W} height={H} rx="4" className="vault-chart__tooltip-bg" />
-            <text x={tx + 12} y={ty + 18} className="vault-chart__tooltip-title">
+        <div
+            className="vault-chart-tip"
+            style={style}
+            onMouseEnter={onMouseEnter}
+            onMouseLeave={onMouseLeave}
+            role="tooltip"
+        >
+            <div className="vault-chart-tip__title">
                 {hover.boardName || hover.release}
-            </text>
-            <text x={tx + 12} y={ty + 33} className="vault-chart__tooltip-meta">
-                <tspan fill={hover.color}>● </tspan>{hover.teamName} · {hover.release}
-            </text>
-            <text x={tx + 12} y={ty + 48} className="vault-chart__tooltip-meta">
-                <tspan className="vault-chart__tooltip-value">{hover.sentiment}%</tspan>
-                {'  '}
-                <tspan fill="var(--vault-success)">▲{hover.wwVotes || 0}</tspan>
-                {'  '}
-                <tspan fill="var(--vault-danger)">▼{hover.tiVotes || 0}</tspan>
-            </text>
-            <text x={tx + 12} y={ty + 64} className="vault-chart__tooltip-hint">
-                Click to view details
-            </text>
-        </g>
-    );
-}
-
-/* ---------- Drill-down panel ---------- */
-
-function DrillDownPanel({ drillDown, feedback, onClose }) {
-    const { boardName, teamName, teamColor, release } = drillDown;
-
-    const wentWell = (feedback || []).filter(fi => fi.category__c === 'went_well__c')
-        .sort((a, b) => (Number(b.vote_count__c) || 0) - (Number(a.vote_count__c) || 0));
-    const toImprove = (feedback || []).filter(fi => fi.category__c === 'didnt_go_well__c')
-        .sort((a, b) => (Number(b.vote_count__c) || 0) - (Number(a.vote_count__c) || 0));
-
-    return (
-        <div className="vault-card vault-mb-24 vault-drilldown">
-            <div className="vault-card__header">
-                <span className="vault-card__title">
-                    <span className="vault-chart-legend__swatch" style={{ background: teamColor }} />
-                    {' '}{teamName} — {release}
+            </div>
+            <div className="vault-chart-tip__meta">
+                <span className="vault-chart-tip__swatch" style={{ background: hover.color }} />
+                {hover.teamName} · {hover.release}
+            </div>
+            <div className="vault-chart-tip__stats">
+                <span className="vault-chart-tip__pct">{hover.sentiment}%</span>
+                <span className="vault-chart-tip__stat vault-chart-tip__stat--positive">
+                    <span className="vault-chart-tip__icon" aria-hidden="true">+</span>
+                    {hover.wwVotes || 0} Went Well
                 </span>
-                <button className="vault-action-btn" onClick={onClose} title="Close">×</button>
+                <span className="vault-chart-tip__stat vault-chart-tip__stat--negative">
+                    <span className="vault-chart-tip__icon" aria-hidden="true">−</span>
+                    {hover.tiVotes || 0} To Improve
+                </span>
             </div>
-            <div className="vault-card__body">
-                {!feedback ? (
-                    <Spinner />
-                ) : wentWell.length === 0 && toImprove.length === 0 ? (
-                    <EmptyState message="No Went Well / To Improve items on this board." />
-                ) : (
-                    <div className="vault-drilldown__columns">
-                        <DrillColumn title="Went Well" items={wentWell} accentClass="vault-drilldown__col--positive" />
-                        <DrillColumn title="To Improve" items={toImprove} accentClass="vault-drilldown__col--negative" />
-                    </div>
-                )}
-            </div>
-        </div>
-    );
-}
-
-function DrillColumn({ title, items, accentClass }) {
-    return (
-        <div className={'vault-drilldown__col ' + (accentClass || '')}>
-            <div className="vault-drilldown__col-header">{title} ({items.length})</div>
-            {items.map(fi => (
-                <div key={fi.id} className="vault-drilldown__item">
-                    <div className="vault-drilldown__item-content">{fi.content__c}</div>
-                    <div className="vault-drilldown__item-meta">
-                        <span>{userName(fi, 'author')}</span>
-                        {fi.theme__c && <ThemeBadge theme={fi.theme__c} />}
-                        {fi.feature__c && <span className="vault-feedback-card__feature">{fi.feature__c}</span>}
-                        <span className="vault-drilldown__item-votes">▲ {Number(fi.vote_count__c) || 0}</span>
-                    </div>
-                </div>
-            ))}
+            {hover.boardId && (
+                <button
+                    type="button"
+                    className="vault-btn vault-btn--secondary vault-btn--small vault-chart-tip__btn"
+                    onClick={() => onOpenBoard(hover.boardId)}
+                >
+                    Open board →
+                </button>
+            )}
         </div>
     );
 }
 
 /* ---------- Release list (management) ---------- */
 
-function ReleaseListPanel({ releases, boards, features, onAddFeature, onDeleteFeature }) {
+function ReleaseListPanel({ releases, boards, teams, features, feedback, boardFeatures, actions, onDeleteFeature }) {
+    const teamNameById = new Map(teams.map(t => [t.id, t.name__v]));
+    const boardById = new Map(boards.map(b => [b.id, b]));
+
+    // (releaseId|teamId) -> { done, inProgress, open, total }
+    const actionsByRelTeam = new Map();
+    for (const a of actions || []) {
+        const board = boardById.get(a.retro_board__c);
+        if (!board || !board.release__c || !board.team__c) continue;
+        const key = `${board.release__c}|${board.team__c}`;
+        if (!actionsByRelTeam.has(key)) actionsByRelTeam.set(key, { done: 0, inProgress: 0, open: 0, total: 0 });
+        const bucket = actionsByRelTeam.get(key);
+        bucket.total += 1;
+        if (a.status__c === 'done__c') bucket.done += 1;
+        else if (a.status__c === 'in_progress__c') bucket.inProgress += 1;
+        else bucket.open += 1;
+    }
+
     const boardCountByRelease = new Map();
+    const releaseByBoard = new Map();
     for (const b of boards) {
         if (b.release__c) {
             boardCountByRelease.set(b.release__c, (boardCountByRelease.get(b.release__c) || 0) + 1);
+            releaseByBoard.set(b.id, b.release__c);
         }
     }
+
     const featuresByRelease = new Map();
     for (const f of features) {
         if (!featuresByRelease.has(f.release__c)) featuresByRelease.set(f.release__c, []);
         featuresByRelease.get(f.release__c).push(f);
+    }
+
+    // featureId -> Set<teamId> (teams that have a board working this feature)
+    const teamsByFeature = new Map();
+    // featureId -> count of junction rows (used by delete-guard)
+    const junctionCountByFeature = new Map();
+    for (const bf of boardFeatures || []) {
+        const board = boardById.get(bf.retro_board__c);
+        junctionCountByFeature.set(bf.retro_feature__c, (junctionCountByFeature.get(bf.retro_feature__c) || 0) + 1);
+        if (!board || !board.team__c) continue;
+        if (!teamsByFeature.has(bf.retro_feature__c)) teamsByFeature.set(bf.retro_feature__c, new Set());
+        teamsByFeature.get(bf.retro_feature__c).add(board.team__c);
+    }
+
+    // (releaseId|featureName) -> { ww, ti } using feedback.feature__c free-text
+    const countsByRelFeature = new Map();
+    // featureId-equivalent key (releaseId|name) -> total feedback references
+    const feedbackRefs = new Map();
+    for (const fi of feedback || []) {
+        const featureName = fi.feature__c;
+        if (!featureName) continue;
+        const relId = releaseByBoard.get(fi.retro_board__c);
+        if (!relId) continue;
+        const key = `${relId}|${featureName}`;
+        feedbackRefs.set(key, (feedbackRefs.get(key) || 0) + 1);
+        const cat = fi.category__c;
+        if (cat !== 'went_well__c' && cat !== 'didnt_go_well__c') continue;
+        if (!countsByRelFeature.has(key)) countsByRelFeature.set(key, { ww: 0, ti: 0 });
+        const c = countsByRelFeature.get(key);
+        if (cat === 'went_well__c') c.ww += 1;
+        else c.ti += 1;
     }
 
     return (
@@ -507,7 +519,12 @@ function ReleaseListPanel({ releases, boards, features, onAddFeature, onDeleteFe
                                 release={r}
                                 boardCount={boardCountByRelease.get(r.id) || 0}
                                 features={featuresByRelease.get(r.id) || []}
-                                onAddFeature={name => onAddFeature(r.id, name)}
+                                teamsByFeature={teamsByFeature}
+                                teamNameById={teamNameById}
+                                junctionCountByFeature={junctionCountByFeature}
+                                countsByRelFeature={countsByRelFeature}
+                                feedbackRefs={feedbackRefs}
+                                actionsByRelTeam={actionsByRelTeam}
                                 onDeleteFeature={onDeleteFeature}
                             />
                         ))}
@@ -518,27 +535,47 @@ function ReleaseListPanel({ releases, boards, features, onAddFeature, onDeleteFe
     );
 }
 
-function ReleaseRow({ release, boardCount, features, onAddFeature, onDeleteFeature }) {
-    const [draft, setDraft] = useState('');
-    const [adding, setAdding] = useState(false);
+function ReleaseRow({
+    release, boardCount, features,
+    teamsByFeature, teamNameById, junctionCountByFeature,
+    countsByRelFeature, feedbackRefs, actionsByRelTeam,
+    onDeleteFeature,
+}) {
+    // Native Vault object page for the release record — opens in a new tab.
+    const releaseHref = `/ui/#object/retro_release__c/${encodeURIComponent(release.id)}`;
 
-    async function handleAdd() {
-        const v = draft.trim();
-        if (!v) return;
-        setAdding(true);
-        try {
-            await onAddFeature(v);
-            setDraft('');
-        } finally {
-            setAdding(false);
+    // Group features by team (same feature may appear under multiple teams).
+    // Features with no team-board link fall into "Unassigned".
+    const byTeam = new Map(); // teamId -> [feature, ...]
+    const unassigned = [];
+    for (const f of features) {
+        const teamIds = teamsByFeature.get(f.id);
+        if (!teamIds || teamIds.size === 0) {
+            unassigned.push(f);
+            continue;
+        }
+        for (const tid of teamIds) {
+            if (!byTeam.has(tid)) byTeam.set(tid, []);
+            byTeam.get(tid).push(f);
         }
     }
+
+    const orderedTeamIds = [...byTeam.keys()].sort((a, b) =>
+        (teamNameById.get(a) || a).localeCompare(teamNameById.get(b) || b));
 
     return (
         <div className="vault-release-row">
             <div className="vault-release-row__header">
                 <div>
-                    <span className="vault-release-row__name">{release.name__v}</span>
+                    <a
+                        className="vault-release-row__name vault-release-row__name--link"
+                        href={releaseHref}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        title="Open release in Vault (new tab)"
+                    >
+                        {release.name__v}
+                    </a>
                     <span className="vault-text-small vault-text-muted">
                         {' · '}{boardCount} board{boardCount !== 1 ? 's' : ''}
                         {' · '}{features.length} feature{features.length !== 1 ? 's' : ''}
@@ -550,35 +587,111 @@ function ReleaseRow({ release, boardCount, features, onAddFeature, onDeleteFeatu
                     No features yet.
                 </div>
             ) : (
-                <div className="vault-chip-list vault-mb-8">
-                    {features.map(f => {
-                        const name = f.display_name__c || f.name__v;
-                        return (
-                        <span key={f.id} className="vault-chip">
-                            {name}
+                <div className="vault-release-row__teams">
+                    {orderedTeamIds.map(tid => (
+                        <FeatureTeamGroup
+                            key={tid}
+                            teamLabel={teamNameById.get(tid) || 'Unknown team'}
+                            features={byTeam.get(tid)}
+                            releaseId={release.id}
+                            junctionCountByFeature={junctionCountByFeature}
+                            countsByRelFeature={countsByRelFeature}
+                            feedbackRefs={feedbackRefs}
+                            actionStats={actionsByRelTeam.get(`${release.id}|${tid}`)}
+                            onDeleteFeature={onDeleteFeature}
+                        />
+                    ))}
+                    {unassigned.length > 0 && (
+                        <FeatureTeamGroup
+                            teamLabel="Unassigned"
+                            subtle
+                            features={unassigned}
+                            releaseId={release.id}
+                            junctionCountByFeature={junctionCountByFeature}
+                            countsByRelFeature={countsByRelFeature}
+                            feedbackRefs={feedbackRefs}
+                            onDeleteFeature={onDeleteFeature}
+                        />
+                    )}
+                </div>
+            )}
+        </div>
+    );
+}
+
+function FeatureTeamGroup({
+    teamLabel, subtle, features, releaseId,
+    junctionCountByFeature, countsByRelFeature, feedbackRefs,
+    actionStats,
+    onDeleteFeature,
+}) {
+    const sorted = [...features].sort((a, b) =>
+        (a.display_name__c || a.name__v).localeCompare(b.display_name__c || b.name__v));
+
+    return (
+        <div className={'vault-team-group' + (subtle ? ' vault-team-group--subtle' : '')}>
+            <div className="vault-team-group__label">
+                <span className="vault-team-group__name">{teamLabel}</span>
+                {actionStats && actionStats.total > 0 && (
+                    <ActionProgress stats={actionStats} />
+                )}
+            </div>
+            <div className="vault-chip-list">
+                {sorted.map(f => {
+                    const name = f.display_name__c || f.name__v;
+                    const key = `${releaseId}|${name}`;
+                    const counts = countsByRelFeature.get(key) || { ww: 0, ti: 0 };
+                    const junctionCount = junctionCountByFeature.get(f.id) || 0;
+                    const feedbackCount = feedbackRefs.get(key) || 0;
+                    const inUse = junctionCount > 0 || feedbackCount > 0;
+                    const deleteTitle = inUse
+                        ? `In use — ${junctionCount} board${junctionCount === 1 ? '' : 's'}` +
+                          (feedbackCount ? `, ${feedbackCount} feedback item${feedbackCount === 1 ? '' : 's'}` : '') +
+                          '. Remove from boards first.'
+                        : 'Remove feature';
+                    return (
+                        <span key={f.id} className="vault-chip vault-chip--feature">
+                            <span className="vault-chip__label">{name}</span>
+                            {counts.ww > 0 && (
+                                <span className="vault-chip__count vault-chip__count--positive" title={`${counts.ww} Went Well`}>
+                                    +{counts.ww}
+                                </span>
+                            )}
+                            {counts.ti > 0 && (
+                                <span className="vault-chip__count vault-chip__count--negative" title={`${counts.ti} To Improve`}>
+                                    −{counts.ti}
+                                </span>
+                            )}
                             <button
                                 type="button"
                                 aria-label={`Remove ${name}`}
-                                title="Remove feature"
-                                onClick={() => onDeleteFeature(f.id)}
+                                title={deleteTitle}
+                                disabled={inUse}
+                                onClick={() => onDeleteFeature(f.id, name)}
                             >×</button>
                         </span>
-                    );})}
-                </div>
-            )}
-            <div className="vault-flex vault-gap-8">
-                <input
-                    className="vault-input"
-                    type="text"
-                    placeholder="Add a feature…"
-                    value={draft}
-                    onChange={e => setDraft(e.target.value)}
-                    onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); handleAdd(); } }}
-                    disabled={adding}
-                />
-                <button type="button" className="vault-btn vault-btn--secondary vault-btn--small" onClick={handleAdd} disabled={adding || !draft.trim()}>
-                    {adding ? 'Adding…' : 'Add'}
-                </button>
+                    );
+                })}
+            </div>
+        </div>
+    );
+}
+
+function ActionProgress({ stats }) {
+    const { done, inProgress, open, total } = stats;
+    const donePct = total > 0 ? (done / total) * 100 : 0;
+    const inProgressPct = total > 0 ? (inProgress / total) * 100 : 0;
+    const openPct = 100 - donePct - inProgressPct;
+    const pctDone = Math.round(donePct);
+    return (
+        <div className="vault-action-progress" title={`${done} done · ${inProgress} in progress · ${open} not started`}>
+            <div className="vault-action-progress__summary">
+                Actions: <strong>{done}/{total}</strong> done <span className="vault-text-muted">({pctDone}%)</span>
+            </div>
+            <div className="vault-action-progress__bar" role="progressbar" aria-valuenow={pctDone} aria-valuemin="0" aria-valuemax="100">
+                {done > 0 && <span className="vault-action-progress__seg vault-action-progress__seg--done" style={{ width: `${donePct}%` }} />}
+                {inProgress > 0 && <span className="vault-action-progress__seg vault-action-progress__seg--progress" style={{ width: `${inProgressPct}%` }} />}
+                {open > 0 && <span className="vault-action-progress__seg vault-action-progress__seg--open" style={{ width: `${openPct}%` }} />}
             </div>
         </div>
     );

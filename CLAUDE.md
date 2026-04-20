@@ -41,6 +41,8 @@ The app is **deployed and working** on `align-veeva-productvaultcrm.veevavault.c
 
 **Seed data** present on the live Vault: 3 teams (Align, Campaign Manager, Network — IDs `VLQ000000001001-003`), 15 retro boards (3 teams × 5 releases: `26R1.0` active + `25R3.5` / `25R3.4` / `25R3.2` / `25R3.0` closed), ~90 feedback items, ~45 action items, ~6 kudos on active boards. Users used as facilitators/authors: Neal Mundy (`1121601`), Zied Belkhodja (`31435884`), Fernando Pingitore (`31435872`).
 
+**Per-release feature distribution (post-reseed)**: Each release carries 6–9 features, not all 15 — features are assigned by team × release in `scripts/reseed_features.py` (`TEAM_RELEASE_FEATURES` map). Each team owns its product area (Align = territory/roster, Campaign Manager = campaigns/analytics, Network = master-data/DCR) and each release slice is the union of what each team worked on that cycle. Feedback `feature__c` strings are re-tagged by the script when they don't match the board's new feature set.
+
 ## Architecture decisions (important context)
 
 - **User references use `user__sys`** (Vault system users), not a custom user object.
@@ -267,6 +269,7 @@ curl -X POST -H "Authorization: $SESSION_ID" -H "Content-Type: text/plain" \
 - `client/src/pages/SeedData.jsx` - Demo data seeder. Creates releases → features-per-release → boards → board↔feature junction rows for team-subset scoping.
 - `scripts/migrate_releases.py` - First migration: existing `release_tag__c` / `features__c` on boards → new `retro_release__c` records + `release__c` join. Features across boards with the same tag are unioned.
 - `scripts/migrate_features.py` - Second migration: parse each release's `features__c` text into `retro_feature__c` records + backfill `retro_board_feature__c` junction rows using a team-name heuristic (see `TEAM_FEATURE_SETS` in the script).
+- `scripts/reseed_features.py` - Destructive reseed: deletes all `retro_feature__c` + `retro_board_feature__c`, recreates per-release/per-team distribution from `TEAM_RELEASE_FEATURES`, re-tags inconsistent feedback `feature__c` strings. Supports `--feedback-only` to re-tag without touching features/junctions.
 - `scripts/migration/drop_old_board_fields.mdl` - MDL to drop `release_tag__c` + `features__c` from `retro_board__c` after the first migration.
 - `scripts/migration/drop_release_features_field.mdl` - MDL to drop `features__c` from `retro_release__c` after the second migration.
 - `server/src/main/java/com/veeva/vault/custom/RetroVaultPageController.java` - onLoad + onEvent dispatch.
