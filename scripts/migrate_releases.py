@@ -43,9 +43,30 @@ def vql(query: str):
     )
     r.raise_for_status()
     body = r.json()
-    if body.get("responseStatus") != "SUCCESS":
+    status = body.get("responseStatus")
+    # WARNING (e.g. duplicate-query) still returns valid data.
+    if status not in ("SUCCESS", "WARNING"):
         raise RuntimeError(f"VQL failed: {body}")
     return body.get("data", [])
+
+
+def _extract_id(body, obj):
+    """Parse the Vault vobjects POST/PUT response. data is a list of
+    {id, url} on success, or the entry itself may carry responseStatus:FAILURE
+    with errors."""
+    if body.get("responseStatus") != "SUCCESS":
+        raise RuntimeError(f"{obj} call failed: {body}")
+    data = body.get("data")
+    if not data:
+        raise RuntimeError(f"{obj} response missing data: {body}")
+    entry = data[0] if isinstance(data, list) else data
+    # Nested entry may still report failure with explicit responseStatus
+    if entry.get("responseStatus") and entry["responseStatus"] != "SUCCESS":
+        raise RuntimeError(f"{obj} entry failed: {entry}")
+    rid = entry.get("id") or (entry.get("data") or {}).get("id")
+    if not rid:
+        raise RuntimeError(f"{obj} response missing id: {entry}")
+    return rid
 
 
 def create_record(obj: str, fields: dict) -> str:
@@ -55,31 +76,18 @@ def create_record(obj: str, fields: dict) -> str:
         data=fields,
     )
     r.raise_for_status()
-    body = r.json()
-    data = body.get("data")
-    if body.get("responseStatus") != "SUCCESS" or not data:
-        raise RuntimeError(f"Create {obj} failed: {body}")
-    entry = data[0] if isinstance(data, list) else data
-    if entry.get("responseStatus") != "SUCCESS":
-        raise RuntimeError(f"Create {obj} entry failed: {entry}")
-    return entry["data"]["id"]
+    return _extract_id(r.json(), f"Create {obj}")
 
 
 def update_record(obj: str, record_id: str, fields: dict):
-    payload = {"id": record_id, **fields}
+    # PUT /vobjects/<obj> expects JSON array of records on this Vault.
     r = requests.put(
         f"{BASE}/vobjects/{obj}",
-        headers={**HEADERS, "Content-Type": "application/x-www-form-urlencoded"},
-        data=payload,
+        headers={**HEADERS, "Content-Type": "application/json"},
+        json=[{"id": record_id, **fields}],
     )
     r.raise_for_status()
-    body = r.json()
-    if body.get("responseStatus") != "SUCCESS":
-        raise RuntimeError(f"Update {obj} {record_id} failed: {body}")
-    data = body.get("data")
-    entry = data[0] if isinstance(data, list) else data
-    if entry and entry.get("responseStatus") != "SUCCESS":
-        raise RuntimeError(f"Update {obj} {record_id} entry failed: {entry}")
+    _extract_id(r.json(), f"Update {obj} {record_id}")
 
 
 def union_features(features_list):

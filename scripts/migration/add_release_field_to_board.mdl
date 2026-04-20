@@ -1,0 +1,11 @@
+ALTER Object retro_board__c (
+    add Field release__c (
+        label('Release'),
+        type('ObjectReference'),
+        object('retro_release__c'),
+        relationship_type('reference'),
+        active(true),
+        required(false),
+        list_column(false)
+    )
+);
