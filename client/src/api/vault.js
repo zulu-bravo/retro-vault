@@ -144,9 +144,10 @@ export async function updateRelease(id, fields) {
 /* ---------- Features ---------- */
 
 export async function fetchFeatures() {
+    // VQL doesn't allow ORDER BY on joined fields — client sorts.
     return query(
         "SELECT id, name__v, display_name__c, release__c, release__cr.name__v " +
-        "FROM retro_feature__c ORDER BY release__cr.name__v ASC, display_name__c ASC"
+        "FROM retro_feature__c ORDER BY display_name__c ASC"
     );
 }
 
@@ -178,11 +179,11 @@ export async function deleteFeature(featureId) {
 /* ---------- Board <-> Feature junction ---------- */
 
 export async function fetchBoardFeatures(boardId) {
+    // ORDER BY on joined fields isn't allowed — caller sorts by display name.
     return query(
         "SELECT id, retro_feature__c, retro_feature__cr.name__v, retro_feature__cr.display_name__c " +
         "FROM retro_board_feature__c " +
-        `WHERE retro_board__c = '${escapeVql(boardId)}' ` +
-        "ORDER BY retro_feature__cr.display_name__c ASC"
+        `WHERE retro_board__c = '${escapeVql(boardId)}'`
     );
 }
 
