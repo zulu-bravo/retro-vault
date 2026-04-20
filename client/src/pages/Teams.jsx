@@ -99,7 +99,8 @@ function buildPerTeamStars(feedback, boards, teams) {
         entry.kudosCount += 1;
         entry.totalVotes += votes;
         entry.boards.add(fi.retro_board__c);
-        if (votes > entry.topVotes || (votes === entry.topVotes && !entry.topQuote)) {
+        // Quote = the kudos with the highest vote count this person received.
+        if (votes > entry.topVotes) {
             entry.topVotes = votes;
             entry.topQuote = fi.content__c;
             entry.topRelease = board['release__cr.name__v'] || '';
@@ -126,32 +127,18 @@ function buildPerTeamStars(feedback, boards, teams) {
 /* ---------- Render ---------- */
 
 function TeamStarsSection({ team }) {
-    const podium = team.ranked.slice(0, 3);
+    const top3 = team.ranked.slice(0, 3);
     const rest = team.ranked.slice(3);
 
     return (
         <div className="vault-card vault-mb-24">
             <div className="vault-card__header">
-                <span className="vault-card__title">⭐ {team.name}</span>
+                <span className="vault-card__title">{team.name}</span>
             </div>
             <div className="vault-card__body">
-                <div className="vault-stars-podium">
-                    {podium.map(r => (
-                        <div key={r.id} className={'vault-stars-podium__card' + (r.rank === 1 ? ' vault-stars-podium__card--gold' : '')}>
-                            <div className="vault-stars-podium__rank">
-                                {r.rank === 1 ? '🏆' : r.rank === 2 ? '🥈' : '🥉'}
-                            </div>
-                            <div className="vault-stars-podium__name">{r.name}</div>
-                            <div className="vault-stars-podium__stats">
-                                {r.kudosCount} kudos · {r.totalVotes} votes · {r.boardCount} board{r.boardCount !== 1 ? 's' : ''}
-                            </div>
-                            {r.topQuote && (
-                                <div className="vault-stars-podium__quote">
-                                    "{r.topQuote}"
-                                    {r.topRelease && <span className="vault-stars-podium__release"> — {r.topRelease}</span>}
-                                </div>
-                            )}
-                        </div>
+                <div className="vault-stars-row">
+                    {top3.map(r => (
+                        <StarCard key={r.id} entry={r} />
                     ))}
                 </div>
 
@@ -180,6 +167,33 @@ function TeamStarsSection({ team }) {
                     </table>
                 )}
             </div>
+        </div>
+    );
+}
+
+function StarCard({ entry: r }) {
+    const rankClass = r.rank === 1 ? 'vault-star-card--gold'
+        : r.rank === 2 ? 'vault-star-card--silver'
+        : 'vault-star-card--bronze';
+    const icon = r.rank === 1 ? '🏆' : r.rank === 2 ? '🥈' : '🥉';
+    return (
+        <div className={'vault-star-card ' + rankClass}>
+            <div className="vault-star-card__header">
+                <span className="vault-star-card__medal">{icon}</span>
+                <span className="vault-star-card__rank-num">#{r.rank}</span>
+            </div>
+            <div className="vault-star-card__name">{r.name}</div>
+            <div className="vault-star-card__stats">
+                <span><strong>{r.kudosCount}</strong> kudos</span>
+                <span><strong>{r.totalVotes}</strong> votes</span>
+                <span><strong>{r.boardCount}</strong> board{r.boardCount !== 1 ? 's' : ''}</span>
+            </div>
+            {r.topQuote && (
+                <blockquote className="vault-star-card__quote">
+                    <span className="vault-star-card__quote-text">"{r.topQuote}"</span>
+                    {r.topRelease && <span className="vault-star-card__release">{r.topRelease}</span>}
+                </blockquote>
+            )}
         </div>
     );
 }
