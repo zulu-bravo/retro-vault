@@ -565,6 +565,10 @@
     gap: var(--vault-space-1);
 }
 
+.vault-action-card__theme {
+    margin-bottom: var(--vault-space-2);
+}
+
 .vault-action-card__overdue-label {
     font-size: var(--vault-font-size-xs);
     font-weight: var(--vault-font-weight-medium);
@@ -1907,12 +1911,24 @@
 .vault-star-card--silver .vault-star-card__rank-num { color: #767676; }
 .vault-star-card--bronze .vault-star-card__rank-num { color: #9b6a40; }
 
+.vault-star-card__person {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 4px;
+}
+
 .vault-star-card__name {
     font-size: 14px;
     font-weight: var(--vault-font-weight-bold);
     color: var(--vault-text-primary);
-    margin-bottom: 4px;
     word-break: break-word;
+}
+
+.vault-user {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
 }
 
 .vault-star-card__stats {

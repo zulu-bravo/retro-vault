@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { fetchTeams, fetchBoards, fetchAllActions } from '../api/vault';
 import Spinner, { EmptyState } from '../components/Spinner';
 import Modal from '../components/Modal';
+import Avatar from '../components/Avatar';
 import { toISODate, formatDateMonthDay } from '../utils/format';
 
 export default function Actions({ showToast }) {
@@ -135,7 +136,12 @@ function OverduePanel({ rows, onRowClick }) {
                                     className="vault-table__row--clickable"
                                     title="Click to see overdue items"
                                 >
-                                    <td className="vault-text-bold">{row.assigneeName}</td>
+                                    <td className="vault-text-bold">
+                                        <span className="vault-user">
+                                            <Avatar userId={row.assigneeId} name={row.assigneeName} size="sm" />
+                                            {row.assigneeName}
+                                        </span>
+                                    </td>
                                     <td>{row.count}</td>
                                 </tr>
                             ))}
@@ -177,7 +183,10 @@ function CompletionRatePanel({ rows }) {
                                 const hasBoth = r.onTime > 0 && r.overdue > 0;
                                 return (
                                     <div className="vault-bar-row" key={r.userId}>
-                                        <span className="vault-bar-label">{r.userName}</span>
+                                        <span className="vault-bar-label vault-user">
+                                            <Avatar userId={r.userId} name={r.userName} size="sm" />
+                                            {r.userName}
+                                        </span>
                                         <div className="vault-bar-track" style={{ display: 'flex' }}>
                                             {r.onTime > 0 && (
                                                 <div

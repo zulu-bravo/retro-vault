@@ -44,6 +44,76 @@ async function loadCurrentUserName() {
     }
 }
 
+// user__sys.image__sys is a media__sys record id. The binary lives at
+// /ui/admin/vobjects/image/get/{mediaId}. This endpoint requires the Vault
+// CSRF token (the "ww" param) when hit with cookie auth, so plain
+// <img src=...> from the iframe gets a 403. Workaround: fetch via
+// vaultApiClient (which sends the session-token Authorization header that
+// bypasses CSRF), turn the bytes into a blob URL, and use that as the
+// <img src>. The "/../ui/..." prefix escapes vaultApiClient's mandatory
+// "/api" prefix so the request lands on the real /ui path.
+const _imageBlobCache = new Map();   // mediaId -> blob URL
+const _imageBlobPromises = new Map(); // mediaId -> in-flight promise
+
+export async function fetchUserImageBlobUrl(mediaId) {
+    if (!mediaId) return null;
+    if (_imageBlobCache.has(mediaId)) return _imageBlobCache.get(mediaId);
+    if (_imageBlobPromises.has(mediaId)) return _imageBlobPromises.get(mediaId);
+    const p = (async () => {
+        try {
+            const resp = await vaultApiClient.fetch(
+                `/../ui/admin/vobjects/image/get/${encodeURIComponent(mediaId)}`
+            );
+            if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+            const blob = await resp.blob();
+            const url = URL.createObjectURL(blob);
+            _imageBlobCache.set(mediaId, url);
+            return url;
+        } catch (err) {
+            console.warn('[RetroVault] Could not load image', mediaId, err.message);
+            _imageBlobCache.set(mediaId, null);
+            return null;
+        } finally {
+            _imageBlobPromises.delete(mediaId);
+        }
+    })();
+    _imageBlobPromises.set(mediaId, p);
+    return p;
+}
+
+let _userImagesCache = null;
+let _userImagesPromise = null;
+
+// Returns a Map<userId, mediaId|null>. The mediaId is the image__sys value
+// (a media__sys record id); convert to a blob URL via fetchUserImageBlobUrl.
+export async function loadUserImages() {
+    if (_userImagesCache) return _userImagesCache;
+    if (_userImagesPromise) return _userImagesPromise;
+    _userImagesPromise = (async () => {
+        try {
+            const resp = await vaultApiClient.fetch(
+                '/v25.1/query?q=' + encodeURIComponent('SELECT id, image__sys FROM user__sys'),
+                { headers: { Accept: 'application/json' } }
+            );
+            const json = await resp.json();
+            const rows = json?.data || [];
+            const map = new Map();
+            for (const r of rows) {
+                map.set(String(r.id), r.image__sys || null);
+            }
+            _userImagesCache = map;
+            return map;
+        } catch (err) {
+            console.warn('[RetroVault] Could not load user images:', err.message);
+            _userImagesCache = new Map();
+            return _userImagesCache;
+        } finally {
+            _userImagesPromise = null;
+        }
+    })();
+    return _userImagesPromise;
+}
+
 function ensureInit() {
     if (!_sendEvent) {
         throw new Error('Vault API not initialized. Call initApi(sendEvent, userId) first.');
@@ -245,7 +315,7 @@ export async function fetchFeedbackForBoard(boardId) {
 export async function fetchActionsForBoard(boardId) {
     return query(
         "SELECT id, name__v, retro_board__c, owner__c, owner__cr.name__v, " +
-        "assignee__c, assignee__cr.name__v, " +
+        "assignee__c, assignee__cr.name__v, theme__c, " +
         "status__c, due_date__c, completed_at__c, order__c FROM retro_action__c " +
         `WHERE retro_board__c = '${escapeVql(boardId)}' ` +
         "ORDER BY order__c ASC"
@@ -318,6 +388,6 @@ export async function fetchAllFeedback() {
 export async function fetchAllActions() {
     return query(
         "SELECT id, name__v, retro_board__c, status__c, due_date__c, completed_at__c, " +
-        "assignee__c, assignee__cr.name__v FROM retro_action__c"
+        "theme__c, assignee__c, assignee__cr.name__v FROM retro_action__c"
     );
 }

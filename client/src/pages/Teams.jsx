@@ -4,6 +4,7 @@
 import React, { useEffect, useState, useMemo } from 'react';
 import { fetchAllFeedback, fetchBoards, fetchTeams, userName } from '../api/vault';
 import Spinner, { EmptyState } from '../components/Spinner';
+import Avatar from '../components/Avatar';
 
 export default function Teams({ showToast }) {
     const [loading, setLoading] = useState(true);
@@ -157,7 +158,12 @@ function TeamStarsSection({ team }) {
                             {rest.map(r => (
                                 <tr key={r.id}>
                                     <td>{r.rank}</td>
-                                    <td className="vault-text-bold">{r.name}</td>
+                                    <td className="vault-text-bold">
+                                        <span className="vault-user">
+                                            <Avatar userId={r.id} name={r.name} size="sm" />
+                                            {r.name}
+                                        </span>
+                                    </td>
                                     <td>{r.kudosCount}</td>
                                     <td>{r.totalVotes}</td>
                                     <td>{r.boardCount}</td>
@@ -182,7 +188,10 @@ function StarCard({ entry: r }) {
                 <span className="vault-star-card__medal">{icon}</span>
                 <span className="vault-star-card__rank-num">#{r.rank}</span>
             </div>
-            <div className="vault-star-card__name">{r.name}</div>
+            <div className="vault-star-card__person">
+                <Avatar userId={r.id} name={r.name} size="lg" />
+                <div className="vault-star-card__name">{r.name}</div>
+            </div>
             <div className="vault-star-card__stats">
                 <span><strong>{r.kudosCount}</strong> kudos</span>
                 <span><strong>{r.totalVotes}</strong> votes</span>

@@ -96,6 +96,7 @@ export default function BoardView({ boardId, highlightActionId, navigate, showTo
     const [aiAssigneeName, setAiAssigneeName] = useState('');
     const [aiStatus, setAiStatus] = useState('open__c');
     const [aiOwnerName, setAiOwnerName] = useState('');
+    const [aiTheme, setAiTheme] = useState('');
 
     // Multi-select for grouping (Cmd/Ctrl+click)
     const [selectedIds, setSelectedIds] = useState(() => new Set());
@@ -309,6 +310,7 @@ export default function BoardView({ boardId, highlightActionId, navigate, showTo
         setAiAssigneeName('');
         setAiStatus('open__c');
         setAiOwnerName('');
+        setAiTheme('');
     }
 
     function openEditAction(item) {
@@ -319,6 +321,7 @@ export default function BoardView({ boardId, highlightActionId, navigate, showTo
         setAiAssigneeName(item['assignee__cr.name__v'] || '');
         setAiStatus(item.status__c || 'open__c');
         setAiOwnerName(userName(item, 'owner'));
+        setAiTheme(item.theme__c || '');
     }
 
     function resetAiModal() {
@@ -329,6 +332,7 @@ export default function BoardView({ boardId, highlightActionId, navigate, showTo
         setAiAssigneeName('');
         setAiStatus('open__c');
         setAiOwnerName('');
+        setAiTheme('');
     }
 
     async function submitAction() {
@@ -345,7 +349,8 @@ export default function BoardView({ boardId, highlightActionId, navigate, showTo
                     name__v: trimmedTitle,
                     due_date__c: aiDue || null,
                     assignee__c: aiAssigneeId || null,
-                    status__c: aiStatus
+                    status__c: aiStatus,
+                    theme__c: aiTheme || null,
                 };
                 // Stamp completion time when first moving to Done; leave it
                 // alone if already Done (don't overwrite the original timestamp).
@@ -368,6 +373,7 @@ export default function BoardView({ boardId, highlightActionId, navigate, showTo
                 };
                 if (aiDue) fields.due_date__c = aiDue;
                 if (aiAssigneeId) fields.assignee__c = aiAssigneeId;
+                if (aiTheme) fields.theme__c = aiTheme;
                 const maxOrder = actions.reduce((max, a) => Math.max(max, Number(a.order__c) || 0), 0);
                 fields.order__c = String(maxOrder + 1);
 
@@ -1156,6 +1162,15 @@ export default function BoardView({ boardId, highlightActionId, navigate, showTo
                                 onChange={(e) => setAiDue(e.target.value)}
                             />
                         </div>
+                        <div className="vault-form-group">
+                            <label className="vault-label">Theme</label>
+                            <select className="vault-select" value={aiTheme} onChange={(e) => setAiTheme(e.target.value)}>
+                                <option value="">None</option>
+                                {THEMES.map(t => (
+                                    <option key={t.name} value={t.name}>{t.label}</option>
+                                ))}
+                            </select>
+                        </div>
                         {aiModal.id && (
                             <div className="vault-form-group">
                                 <label className="vault-label">Status</label>
@@ -1368,6 +1383,11 @@ function ActionCard({ item, assigneeName, statusLabel, highlighted, dropPosition
             })()}
             <div className="vault-action-card__drag-handle">⠿</div>
             <div className="vault-action-card__title">{item.name__v}</div>
+            {item.theme__c && (
+                <div className="vault-action-card__theme">
+                    <ThemeBadge theme={item.theme__c} />
+                </div>
+            )}
             <div className="vault-action-card__field-row">
                 <span className="vault-action-card__field-label">Assigned to:</span>
                 <span>{assigneeName || 'Unassigned'}</span>
