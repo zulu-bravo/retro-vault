@@ -161,6 +161,15 @@ function Header() {
                 <h1 className="vault-page-header__title">Releases</h1>
                 <p className="vault-page-header__subtitle">Cross-team signals and feature lists by release</p>
             </div>
+            <button
+                type="button"
+                className="vault-btn vault-btn--secondary"
+                disabled
+                title="Coming soon"
+            >
+                Sync from JIRA
+                <span className="vault-btn__badge">coming soon</span>
+            </button>
         </div>
     );
 }

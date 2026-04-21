@@ -2032,3 +2032,17 @@
     border-radius: 999px;
     line-height: 1.4;
 }
+
+.vault-btn__badge {
+    display: inline-block;
+    margin-left: 8px;
+    padding: 1px 6px;
+    font-size: 9px;
+    font-weight: var(--vault-font-weight-bold);
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
+    line-height: 1.4;
+    background: var(--vault-silver-light, #eee);
+    color: var(--vault-text-secondary);
+    border-radius: 999px;
+}
