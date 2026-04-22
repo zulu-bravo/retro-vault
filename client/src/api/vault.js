@@ -242,10 +242,6 @@ export async function createFeature(displayName, releaseId, releaseName) {
     });
 }
 
-export async function deleteFeature(featureId) {
-    return deleteRecord('retro_feature__c', featureId);
-}
-
 /* ---------- Board <-> Feature junction ---------- */
 
 export async function fetchBoardFeatures(boardId) {

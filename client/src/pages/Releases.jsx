@@ -1,12 +1,12 @@
 // Releases — Release Sentiment chart + release management.
 // One line per team across releases, Y-axis 0–100% sentiment
-// (sum of votes on went_well / sum of votes on went_well + to_improve).
+// (Went Well score / (Went Well + To Improve) score). Each card contributes
+// 1 + its vote_count__c to the score for its category.
 // Below the chart: a list of releases with inline-editable features.
 import React, { useEffect, useState, useMemo } from 'react';
 import {
     fetchAllFeedback, fetchBoards, fetchTeams,
     fetchReleases, fetchFeatures, fetchAllBoardFeatures,
-    deleteFeature,
 } from '../api/vault';
 import Spinner, { EmptyState } from '../components/Spinner';
 
@@ -91,18 +91,6 @@ export default function Releases({ showToast }) {
         }
     }
 
-    async function handleDeleteFeature(featureId, featureName) {
-        if (!window.confirm(`Remove "${featureName}" from this release? This cannot be undone.`)) {
-            return;
-        }
-        try {
-            await deleteFeature(featureId);
-            setFeatures(prev => prev.filter(f => f.id !== featureId));
-        } catch (err) {
-            showToast && showToast('Failed to remove feature: ' + err.message, 'error');
-        }
-    }
-
     if (loading) return <Spinner />;
 
     const visibleSeries = chart ? chart.series.filter(s => !hiddenTeams.has(s.teamId)) : [];
@@ -113,7 +101,7 @@ export default function Releases({ showToast }) {
 
             <div className="vault-card vault-mb-24">
                 <div className="vault-card__header">
-                    <span className="vault-card__title">Release Sentiment</span>
+                    <span className="vault-card__title">Overall Sentiment by Release</span>
                 </div>
                 <div className="vault-card__body">
                     {!chart || chart.releases.length === 0 ? (
@@ -121,7 +109,7 @@ export default function Releases({ showToast }) {
                     ) : (
                         <>
                             <p className="vault-text-small vault-text-muted vault-mb-16">
-                                For each release × team, sentiment = vote-weighted Went Well share of the total Went Well + To Improve. Higher means a happier retro. Click a team to hide it; double-click to isolate.
+                                Ratio of 'Went Well' to 'To Improve' score. Each card equals one point, each vote equals one point.
                             </p>
                             <Legend
                                 teams={chart.teamMeta}
@@ -148,7 +136,6 @@ export default function Releases({ showToast }) {
                 features={features}
                 feedback={feedback}
                 boardFeatures={boardFeatures}
-                onDeleteFeature={handleDeleteFeature}
             />
         </>
     );
@@ -158,7 +145,7 @@ function Header() {
     return (
         <div className="vault-page-header">
             <div>
-                <h1 className="vault-page-header__title">Releases</h1>
+                <h1 className="vault-page-header__title">Release Sentiment</h1>
                 <p className="vault-page-header__subtitle">Cross-team signals and feature lists by release</p>
             </div>
             <button
@@ -191,16 +178,18 @@ function buildChart(feedback, boards, teams) {
         if (!releaseName || !board.team__c) continue;
         const cat = fi.category__c;
         if (cat !== 'went_well__c' && cat !== 'didnt_go_well__c') continue;
-        const weight = Number(fi.vote_count__c) || 0;
+        // Score = 1 (the card itself) + its vote count. Kept on the `…Votes`
+        // field names for historical reasons; displayed as "N Went Well" etc.
+        const score = 1 + (Number(fi.vote_count__c) || 0);
         const key = `${releaseName}|${board.team__c}`;
         if (!buckets.has(key)) buckets.set(key, { wwVotes: 0, totalVotes: 0, wwCount: 0, totalCount: 0, boardId: board.id, boardName: board.name__v });
         const b = buckets.get(key);
-        b.totalVotes += weight;
+        b.totalVotes += score;
         b.totalCount += 1;
         b.boardId = board.id;
         b.boardName = board.name__v;
         if (cat === 'went_well__c') {
-            b.wwVotes += weight;
+            b.wwVotes += score;
             b.wwCount += 1;
         }
     }
@@ -448,7 +437,7 @@ function Tooltip({ hover, xPct, yPct, onOpenBoard, onMouseEnter, onMouseLeave })
 
 /* ---------- Release list (management) ---------- */
 
-function ReleaseListPanel({ releases, boards, teams, features, feedback, boardFeatures, onDeleteFeature }) {
+function ReleaseListPanel({ releases, boards, teams, features, feedback, boardFeatures }) {
     const teamNameById = new Map(teams.map(t => [t.id, t.name__v]));
     const boardById = new Map(boards.map(b => [b.id, b]));
 
@@ -460,21 +449,17 @@ function ReleaseListPanel({ releases, boards, teams, features, feedback, boardFe
     });
 
     const boardCountByRelease = new Map();
-    const releaseByBoard = new Map();
     for (const b of boards) {
         if (b.release__c) {
             boardCountByRelease.set(b.release__c, (boardCountByRelease.get(b.release__c) || 0) + 1);
-            releaseByBoard.set(b.id, b.release__c);
         }
     }
 
     // (releaseId|teamId) -> [features...]  only features linked to that team's board.
     const featuresByRelTeam = new Map();
     const teamsByFeature = new Map();
-    const junctionCountByFeature = new Map();
     for (const bf of boardFeatures || []) {
         const board = boardById.get(bf.retro_board__c);
-        junctionCountByFeature.set(bf.retro_feature__c, (junctionCountByFeature.get(bf.retro_feature__c) || 0) + 1);
         if (!board || !board.team__c || !board.release__c) continue;
         if (!teamsByFeature.has(bf.retro_feature__c)) teamsByFeature.set(bf.retro_feature__c, new Set());
         teamsByFeature.get(bf.retro_feature__c).add(board.team__c);
@@ -491,22 +476,32 @@ function ReleaseListPanel({ releases, boards, teams, features, feedback, boardFe
         }
     }
 
-    // (releaseId|featureName) -> { ww, ti } for the inline feedback counts.
+    // (releaseId|teamId|featureName) -> { ww, ti } so each team's cell only
+    // counts cards from its own board, not cards from other teams' boards that
+    // happen to tag the same feature. Each card contributes 1 + its vote count.
+    // Cards without a feature__c roll up into noFeatureByRelTeam.
     const countsByRelFeature = new Map();
-    const feedbackRefs = new Map();
+    const noFeatureByRelTeam = new Map();
     for (const fi of feedback || []) {
-        const featureName = fi.feature__c;
-        if (!featureName) continue;
-        const relId = releaseByBoard.get(fi.retro_board__c);
-        if (!relId) continue;
-        const key = `${relId}|${featureName}`;
-        feedbackRefs.set(key, (feedbackRefs.get(key) || 0) + 1);
+        const board = boardById.get(fi.retro_board__c);
+        if (!board || !board.release__c || !board.team__c) continue;
         const cat = fi.category__c;
         if (cat !== 'went_well__c' && cat !== 'didnt_go_well__c') continue;
-        if (!countsByRelFeature.has(key)) countsByRelFeature.set(key, { ww: 0, ti: 0 });
-        const c = countsByRelFeature.get(key);
-        if (cat === 'went_well__c') c.ww += 1;
-        else c.ti += 1;
+        const score = 1 + (Number(fi.vote_count__c) || 0);
+        const featureName = fi.feature__c;
+        if (featureName) {
+            const key = `${board.release__c}|${board.team__c}|${featureName}`;
+            if (!countsByRelFeature.has(key)) countsByRelFeature.set(key, { ww: 0, ti: 0 });
+            const c = countsByRelFeature.get(key);
+            if (cat === 'went_well__c') c.ww += score;
+            else c.ti += score;
+        } else {
+            const key = `${board.release__c}|${board.team__c}`;
+            if (!noFeatureByRelTeam.has(key)) noFeatureByRelTeam.set(key, { ww: 0, ti: 0 });
+            const c = noFeatureByRelTeam.get(key);
+            if (cat === 'went_well__c') c.ww += score;
+            else c.ti += score;
+        }
     }
 
     const featureCountByRelease = new Map();
@@ -517,7 +512,7 @@ function ReleaseListPanel({ releases, boards, teams, features, feedback, boardFe
     return (
         <div className="vault-card vault-mb-24">
             <div className="vault-card__header">
-                <span className="vault-card__title">Releases</span>
+                <span className="vault-card__title">Sentiment by Feature</span>
             </div>
             <div className="vault-card__body">
                 {releases.length === 0 ? (
@@ -551,10 +546,8 @@ function ReleaseListPanel({ releases, boards, teams, features, feedback, boardFe
                                 teams={sortedTeams}
                                 teamColorById={teamColorById}
                                 featuresByRelTeam={featuresByRelTeam}
-                                junctionCountByFeature={junctionCountByFeature}
                                 countsByRelFeature={countsByRelFeature}
-                                feedbackRefs={feedbackRefs}
-                                onDeleteFeature={onDeleteFeature}
+                                noFeatureByRelTeam={noFeatureByRelTeam}
                             />
                         ))}
                     </div>
@@ -566,8 +559,7 @@ function ReleaseListPanel({ releases, boards, teams, features, feedback, boardFe
 
 function ReleaseMatrixRow({
     release, boardCount, featureCount, teams, teamColorById,
-    featuresByRelTeam, junctionCountByFeature, countsByRelFeature, feedbackRefs,
-    onDeleteFeature,
+    featuresByRelTeam, countsByRelFeature, noFeatureByRelTeam,
 }) {
     const releaseHref = `/ui/#object/retro_release__c/${encodeURIComponent(release.id)}`;
     return (
@@ -588,6 +580,8 @@ function ReleaseMatrixRow({
             </div>
             {teams.map(t => {
                 const list = featuresByRelTeam.get(`${release.id}|${t.id}`) || [];
+                const noFeatureCounts = noFeatureByRelTeam.get(`${release.id}|${t.id}`) || { ww: 0, ti: 0 };
+                const hasNoFeature = noFeatureCounts.ww > 0 || noFeatureCounts.ti > 0;
                 const color = teamColorById.get(t.id);
                 return (
                     <div
@@ -596,16 +590,15 @@ function ReleaseMatrixRow({
                         style={{ '--team-color': color }}
                         role="cell"
                     >
-                        {list.length === 0 ? (
+                        {list.length === 0 && !hasNoFeature ? (
                             <span className="vault-release-matrix__empty">—</span>
                         ) : (
                             <FeatureChipList
                                 features={list}
                                 releaseId={release.id}
-                                junctionCountByFeature={junctionCountByFeature}
+                                teamId={t.id}
                                 countsByRelFeature={countsByRelFeature}
-                                feedbackRefs={feedbackRefs}
-                                onDeleteFeature={onDeleteFeature}
+                                noFeatureCounts={noFeatureCounts}
                             />
                         )}
                     </div>
@@ -615,25 +608,16 @@ function ReleaseMatrixRow({
     );
 }
 
-function FeatureChipList({
-    features, releaseId, junctionCountByFeature, countsByRelFeature, feedbackRefs, onDeleteFeature,
-}) {
+function FeatureChipList({ features, releaseId, teamId, countsByRelFeature, noFeatureCounts }) {
     const sorted = [...features].sort((a, b) =>
         (a.display_name__c || a.name__v).localeCompare(b.display_name__c || b.name__v));
+    const hasNoFeature = noFeatureCounts && (noFeatureCounts.ww > 0 || noFeatureCounts.ti > 0);
     return (
         <div className="vault-chip-list">
             {sorted.map(f => {
                 const name = f.display_name__c || f.name__v;
-                const key = `${releaseId}|${name}`;
+                const key = `${releaseId}|${teamId}|${name}`;
                 const counts = countsByRelFeature.get(key) || { ww: 0, ti: 0 };
-                const junctionCount = junctionCountByFeature.get(f.id) || 0;
-                const feedbackCount = feedbackRefs.get(key) || 0;
-                const inUse = junctionCount > 0 || feedbackCount > 0;
-                const deleteTitle = inUse
-                    ? `In use — ${junctionCount} board${junctionCount === 1 ? '' : 's'}` +
-                      (feedbackCount ? `, ${feedbackCount} feedback item${feedbackCount === 1 ? '' : 's'}` : '') +
-                      '. Remove from boards first.'
-                    : 'Remove feature';
                 return (
                     <span key={f.id} className="vault-chip vault-chip--feature vault-chip--team">
                         <span className="vault-chip__label">{name}</span>
@@ -647,16 +631,27 @@ function FeatureChipList({
                                 −{counts.ti}
                             </span>
                         )}
-                        <button
-                            type="button"
-                            aria-label={`Remove ${name}`}
-                            title={deleteTitle}
-                            disabled={inUse}
-                            onClick={() => onDeleteFeature(f.id, name)}
-                        >×</button>
                     </span>
                 );
             })}
+            {hasNoFeature && (
+                <span
+                    className="vault-chip vault-chip--feature vault-chip--no-feature"
+                    title="Feedback on this team's board for this release that didn't tag a feature"
+                >
+                    <span className="vault-chip__label">(no feature)</span>
+                    {noFeatureCounts.ww > 0 && (
+                        <span className="vault-chip__count vault-chip__count--positive" title={`${noFeatureCounts.ww} Went Well`}>
+                            +{noFeatureCounts.ww}
+                        </span>
+                    )}
+                    {noFeatureCounts.ti > 0 && (
+                        <span className="vault-chip__count vault-chip__count--negative" title={`${noFeatureCounts.ti} To Improve`}>
+                            −{noFeatureCounts.ti}
+                        </span>
+                    )}
+                </span>
+            )}
         </div>
     );
 }
