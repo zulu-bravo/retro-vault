@@ -35,8 +35,8 @@ The app is **deployed and working** on `align-veeva-productvaultcrm.veevavault.c
   - `Page.retrovault__c` (Boards, url `retrovault`)
   - `Page.retrovault_actions__c` (Actions, url `retrovault-actions`)
   - `Page.retrovault_releases__c` (Releases, url `retrovault-releases`)
-  - `Page.retrovault_teams__c` (Teams, url `retrovault-teams`)
-- **Four Vault Tabs**: Boards (100), Actions (101), Releases (102), Teams (103). `url_path_name` cannot contain underscores — use dashes.
+  - `Page.retrovault_teams__c` (Star Performers, url `retrovault-teams`)
+- **Four Vault Tabs**: Boards (100), Actions (101), Releases (102), Star Performers (103). `url_path_name` cannot contain underscores — use dashes.
 - The old `Page.retrovault_insights__c` + `Tab.retrovault_insights__c` have been retired in favor of the split Releases + Teams tabs.
 
 **Seed data** present on the live Vault: 3 teams (Align, Campaign Manager, Network — IDs `VLQ000000001001-003`), 15 retro boards (3 teams × 5 releases: `26R1.0` active + `25R3.5` / `25R3.4` / `25R3.2` / `25R3.0` closed), ~90 feedback items, ~45 action items, ~6 kudos on active boards. Users used as facilitators/authors: Neal Mundy (`1121601`), Zied Belkhodja (`31435884`), Fernando Pingitore (`31435872`).
@@ -193,7 +193,7 @@ for P in \
     "retrovault__c|Boards|retrovault|retrovault__c" \
     "retrovault_actions__c|Actions|retrovault-actions|retrovault_actions__c" \
     "retrovault_releases__c|Releases|retrovault-releases|retrovault_releases__c" \
-    "retrovault_teams__c|Teams|retrovault-teams|retrovault_teams__c"; do
+    "retrovault_teams__c|Star Performers|retrovault-teams|retrovault_teams__c"; do
     IFS='|' read -r NAME LABEL URL CODE <<< "$P"
     curl -L "https://$HOST/api/mdl/execute" -H "Content-Type: text/plain" -H "Authorization: $SESSION_ID" \
         -d "RECREATE Page $NAME (
@@ -213,7 +213,7 @@ for T in \
     "retrovault__c|Boards|100|retrovault__c" \
     "retrovault_actions__c|Actions|101|retrovault_actions__c" \
     "retrovault_releases__c|Releases|102|retrovault_releases__c" \
-    "retrovault_teams__c|Teams|103|retrovault_teams__c"; do
+    "retrovault_teams__c|Star Performers|103|retrovault_teams__c"; do
     IFS='|' read -r NAME LABEL ORDER PAGE <<< "$T"
     curl -L "https://$HOST/api/mdl/execute" -H "Content-Type: text/plain" -H "Authorization: $SESSION_ID" \
         -d "RECREATE Tab $NAME (

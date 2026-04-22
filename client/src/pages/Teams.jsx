@@ -55,7 +55,7 @@ function Header() {
     return (
         <div className="vault-page-header">
             <div>
-                <h1 className="vault-page-header__title">Teams</h1>
+                <h1 className="vault-page-header__title">Star Performers</h1>
                 <p className="vault-page-header__subtitle">Star Performers recognized via kudos, grouped by team</p>
             </div>
         </div>
@@ -91,6 +91,8 @@ function buildPerTeamStars(feedback, boards, teams) {
                 totalVotes: 0,
                 boards: new Set(),
                 topQuote: null,
+                topQuoteId: null,
+                topBoardId: null,
                 topVotes: -1,
                 topRelease: '',
             });
@@ -104,6 +106,8 @@ function buildPerTeamStars(feedback, boards, teams) {
         if (votes > entry.topVotes) {
             entry.topVotes = votes;
             entry.topQuote = fi.content__c;
+            entry.topQuoteId = fi.id;
+            entry.topBoardId = fi.retro_board__c;
             entry.topRelease = board['release__cr.name__v'] || '';
         }
     }
@@ -198,11 +202,35 @@ function StarCard({ entry: r }) {
                 <span><strong>{r.boardCount}</strong> board{r.boardCount !== 1 ? 's' : ''}</span>
             </div>
             {r.topQuote && (
-                <blockquote className="vault-star-card__quote">
+                <blockquote
+                    className={'vault-star-card__quote' + (r.topBoardId ? ' vault-star-card__quote--clickable' : '')}
+                    role={r.topBoardId ? 'button' : undefined}
+                    tabIndex={r.topBoardId ? 0 : undefined}
+                    title={r.topBoardId ? 'View this kudos on the board' : undefined}
+                    onClick={r.topBoardId ? () => navigateToBoard(r.topBoardId, r.topQuoteId) : undefined}
+                    onKeyDown={r.topBoardId ? (e) => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                            e.preventDefault();
+                            navigateToBoard(r.topBoardId, r.topQuoteId);
+                        }
+                    } : undefined}
+                >
                     <span className="vault-star-card__quote-text">"{r.topQuote}"</span>
                     {r.topRelease && <span className="vault-star-card__release">{r.topRelease}</span>}
                 </blockquote>
             )}
         </div>
     );
+}
+
+function navigateToBoard(boardId, highlightId) {
+    try {
+        const top = window.top;
+        const tabCollection = new URLSearchParams(top.location.search).get('tab-collection');
+        const search = tabCollection ? '?tab-collection=' + encodeURIComponent(tabCollection) : '';
+        const path = encodeURIComponent(boardId) + (highlightId ? '/' + encodeURIComponent(highlightId) : '');
+        top.location.href = top.location.origin + '/ui/' + search + '#custom/page/retrovault/' + path;
+    } catch (e) {
+        console.warn('[RetroVault] Cannot navigate top frame:', e.message);
+    }
 }
