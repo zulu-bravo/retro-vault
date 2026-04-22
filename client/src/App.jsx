@@ -70,7 +70,7 @@ export default function App() {
             content = <Dashboard navigate={navigate} showToast={showToast} />;
             break;
         case 'board':
-            content = <BoardView boardId={view.boardId} highlightActionId={view.actionId} navigate={navigate} showToast={showToast} />;
+            content = <BoardView boardId={view.boardId} highlightId={view.actionId} navigate={navigate} showToast={showToast} />;
             break;
         case 'create-board':
             content = <CreateBoard boardId={view.boardId} navigate={navigate} showToast={showToast} />;

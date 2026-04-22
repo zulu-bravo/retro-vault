@@ -71,7 +71,7 @@ function buildColumnDisplay(items) {
     return result;
 }
 
-export default function BoardView({ boardId, highlightActionId, navigate, showToast }) {
+export default function BoardView({ boardId, highlightId: initialHighlightId, navigate, showToast }) {
     const currentUserId = getCurrentUserId();
 
     const [loading, setLoading] = useState(true);
@@ -80,6 +80,12 @@ export default function BoardView({ boardId, highlightActionId, navigate, showTo
     const [actions, setActions] = useState([]);
     const [userVotes, setUserVotes] = useState({}); // feedbackItemId -> voteRecordId
     const [boardFeatureNames, setBoardFeatureNames] = useState([]);
+
+    // Seeded from the deep-link prop; cleared the first time the user mutates
+    // anything on the board so the highlight doesn't linger. Can point at either
+    // an action (coming from the Actions tab) or a feedback card (coming from
+    // a Star Performers quote).
+    const [highlightId, setHighlightId] = useState(initialHighlightId);
 
     const [fbModal, setFbModal] = useState(null); // { category } or { id, category }
     const [fbContent, setFbContent] = useState('');
@@ -176,6 +182,7 @@ export default function BoardView({ boardId, highlightActionId, navigate, showTo
     /* ---------- Voting ---------- */
 
     async function toggleVote(feedbackItemId) {
+        setHighlightId(null);
         if (!currentUserId) {
             showToast('No current user.', 'error');
             return;
@@ -240,6 +247,7 @@ export default function BoardView({ boardId, highlightActionId, navigate, showTo
     }
 
     async function submitFeedback() {
+        setHighlightId(null);
         const isKudos = fbModal.category === KUDOS_CATEGORY;
         if (!fbContent.trim()) {
             showToast(isKudos ? 'Please describe what they did.' : 'Please enter feedback content.', 'error');
@@ -336,6 +344,7 @@ export default function BoardView({ boardId, highlightActionId, navigate, showTo
     }
 
     async function submitAction() {
+        setHighlightId(null);
         const trimmedTitle = aiTitle.trim();
         if (!trimmedTitle) {
             showToast('Please enter a title.', 'error');
@@ -445,6 +454,7 @@ export default function BoardView({ boardId, highlightActionId, navigate, showTo
     }
 
     async function groupSelectedItems() {
+        setHighlightId(null);
         const ids = contextMenu?.ids || [];
         if (ids.length < 2) { closeContextMenu(); return; }
         const groupId = generateGroupId();
@@ -464,6 +474,7 @@ export default function BoardView({ boardId, highlightActionId, navigate, showTo
     }
 
     async function renameGroup(oldGroupId, newName) {
+        setHighlightId(null);
         const trimmed = (newName || '').trim();
         if (!trimmed || trimmed === oldGroupId) return;
         const ids = feedback.filter(f => f.group__c === oldGroupId).map(f => f.id);
@@ -482,6 +493,7 @@ export default function BoardView({ boardId, highlightActionId, navigate, showTo
     }
 
     async function ungroupItems(groupId) {
+        setHighlightId(null);
         const ids = feedback.filter(f => f.group__c === groupId).map(f => f.id);
         if (ids.length === 0) { closeContextMenu(); return; }
         try {
@@ -615,6 +627,7 @@ export default function BoardView({ boardId, highlightActionId, navigate, showTo
             onDragEnd();
             return;
         }
+        setHighlightId(null);
         const dt = dropTarget;
         const droppedId = drag.type === 'group' ? drag.groupId : drag.id;
 
@@ -880,6 +893,7 @@ export default function BoardView({ boardId, highlightActionId, navigate, showTo
                                                         dragging={dragging}
                                                         dropTarget={dropTarget}
                                                         justDroppedId={justDroppedId}
+                                                        highlightId={highlightId}
                                                         userVotes={userVotes}
                                                         currentUserId={currentUserId}
                                                         selectedIds={selectedIds}
@@ -915,6 +929,7 @@ export default function BoardView({ boardId, highlightActionId, navigate, showTo
                                                 onVote={() => toggleVote(item.id)}
                                                 canVote={!!currentUserId}
                                                 selected={selectedIds.has(item.id)}
+                                                highlighted={item.id === highlightId}
                                                 dropPosition={isDropTarget ? (dropTarget.before ? 'before' : 'after') : null}
                                                 justDropped={item.id === justDroppedId}
                                                 onClick={(e) => handleCardClick(e, item)}
@@ -975,7 +990,7 @@ export default function BoardView({ boardId, highlightActionId, navigate, showTo
                                                 item={a}
                                                 assigneeName={a['assignee__cr.name__v'] || null}
                                                 statusLabel={actionStatusLabel(a.status__c)}
-                                                highlighted={a.id === highlightActionId}
+                                                highlighted={a.id === highlightId}
                                                 dropPosition={isDropTarget ? (dropTarget.before ? 'before' : 'after') : null}
                                                 justDropped={a.id === justDroppedId}
                                                 onClick={() => openEditAction(a)}
@@ -1032,6 +1047,7 @@ export default function BoardView({ boardId, highlightActionId, navigate, showTo
                         onClose={resetFbModal}
                         onConfirm={submitFeedback}
                         onDelete={fbModal.id ? async () => {
+                            setHighlightId(null);
                             try {
                                 await deleteRecord('retro_feedback__c', fbModal.id);
                                 setFeedback(prev => prev.filter(f => f.id !== fbModal.id));
@@ -1113,6 +1129,7 @@ export default function BoardView({ boardId, highlightActionId, navigate, showTo
                     onClose={resetAiModal}
                     onConfirm={submitAction}
                     onDelete={aiModal.id ? async () => {
+                        setHighlightId(null);
                         try {
                             await deleteRecord('retro_action__c', aiModal.id);
                             setActions(prev => prev.filter(a => a.id !== aiModal.id));
@@ -1195,7 +1212,7 @@ export default function BoardView({ boardId, highlightActionId, navigate, showTo
 
 function GroupCard({
     groupId, items, columnKey,
-    dragging, dropTarget, justDroppedId,
+    dragging, dropTarget, justDroppedId, highlightId,
     userVotes, currentUserId, selectedIds,
     onToggleVote, onCardClick, onCardContextMenu, onGroupContextMenu,
     onCardDragStart, onGroupDragStart,
@@ -1287,6 +1304,7 @@ function GroupCard({
                             onVote={() => onToggleVote(item.id)}
                             canVote={!!currentUserId}
                             selected={selectedIds.has(item.id)}
+                            highlighted={item.id === highlightId}
                             dropPosition={isDropTarget ? (dropTarget.before ? 'before' : 'after') : null}
                             justDropped={item.id === justDroppedId}
                             onClick={(e) => onCardClick(e, item)}
@@ -1408,19 +1426,29 @@ function ActionCard({ item, assigneeName, statusLabel, highlighted, dropPosition
     );
 }
 
-function FeedbackCard({ item, authorName, isVoted, onVote, canVote, selected, dropPosition, justDropped, onClick, onContextMenu, isDragging, onDragStart, onDragOver, onDragEnd }) {
+function FeedbackCard({ item, authorName, isVoted, onVote, canVote, selected, highlighted, dropPosition, justDropped, onClick, onContextMenu, isDragging, onDragStart, onDragOver, onDragEnd }) {
     const voteCount = parseInt(item.vote_count__c || 0, 10);
     const isKudos = item.category__c === 'kudos__c';
     const recipientName = isKudos
         ? (item['kudos_recipient__cr.name__v'] || 'Someone')
         : null;
+    const cardRef = useRef(null);
+
+    useEffect(() => {
+        if (highlighted && cardRef.current) {
+            cardRef.current.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
+    }, [highlighted]);
+
     return (
         <div
+            ref={cardRef}
             className={
                 'vault-feedback-card vault-feedback-card--clickable' +
                 (isKudos ? ' vault-feedback-card--kudos' : '') +
                 (isDragging ? ' vault-feedback-card--dragging' : '') +
                 (selected ? ' vault-feedback-card--selected' : '') +
+                (highlighted ? ' vault-feedback-card--highlighted' : '') +
                 (justDropped ? ' vault-card--just-dropped' : '') +
                 (dropPosition === 'before' ? ' vault-card--drop-before' : '') +
                 (dropPosition === 'after' ? ' vault-card--drop-after' : '')

@@ -520,7 +520,8 @@
 
 /* Highlighted action card — pulsing blue glow to draw the user's eye
    when arriving via a deep link from the Actions tab. */
-.vault-action-card--highlighted {
+.vault-action-card--highlighted,
+.vault-feedback-card--highlighted {
     border-color: var(--vault-primary);
     box-shadow: 0 0 0 3px var(--vault-focus-ring);
     animation: vault-highlight-pulse 1.5s ease-in-out 3;
@@ -1308,7 +1309,7 @@
     font-size: var(--vault-font-size-md);
     font-weight: var(--vault-font-weight-medium);
     color: var(--vault-gray-700);
-    text-align: right;
+    text-align: left;
     flex-shrink: 0;
 }
 
@@ -1959,6 +1960,16 @@
 .vault-star-card--gold .vault-star-card__quote { border-left-color: #d4a017; }
 .vault-star-card--silver .vault-star-card__quote { border-left-color: #b8b8b8; }
 .vault-star-card--bronze .vault-star-card__quote { border-left-color: #c08a60; }
+
+.vault-star-card__quote--clickable {
+    cursor: pointer;
+    transition: background-color 120ms ease;
+}
+.vault-star-card__quote--clickable:hover,
+.vault-star-card__quote--clickable:focus-visible {
+    background: var(--vault-focus-ring);
+    outline: none;
+}
 
 .vault-star-card__quote-text {
     display: block;
