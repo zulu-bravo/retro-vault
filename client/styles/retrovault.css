@@ -1803,6 +1803,16 @@
     border-bottom-left-radius: 4px;
 }
 
+.vault-chip--no-feature {
+    border-left-color: var(--vault-gray-300);
+    background: transparent;
+    font-style: italic;
+}
+.vault-chip--no-feature .vault-chip__label {
+    color: var(--vault-gray-400);
+    font-weight: var(--vault-font-weight-regular);
+}
+
 @media (max-width: 900px) {
     .vault-release-matrix__row {
         grid-template-columns: 100px repeat(var(--team-count, 3), minmax(0, 1fr));
